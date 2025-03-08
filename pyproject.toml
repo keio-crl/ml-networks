@@ -1,0 +1,30 @@
+[project]
+name = "ml_networks"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "oakwood-fujiken", email = "oakwood.n14.4sp@keio.jp" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "einops>=0.8.1",
+    "kornia>=0.7.3",
+    "numpy>=2.1",
+    "omegaconf>=2.3.0",
+    "pytorch-lightning>=2.4.0",
+    "schedulefree>=1.4",
+    "torch>=2.5",
+    "torch-optimizer>=0.3.0",
+    "torchgeometry>=0.1.2",
+    "torchvision>=0.19.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ipython>=8.33.0",
+]
