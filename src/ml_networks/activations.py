@@ -12,9 +12,11 @@ class Activation(nn.Module):
             self.activation = getattr(nn, activation)(**kwargs)
         except AttributeError:
             if activation == "TanhExp":
-                self.activation = TanhExpBase.apply
+                self.activation = TanhExp()
             elif activation == "REReLU":
                 self.activation = REReLU(reparametarize_fn)
+            elif activation == "SiGLU":
+                self.activation = SiGLU(**kwargs)
             else:
                 raise NotImplementedError(
                     f"Activation: '{activation}' is not implemented yet."
@@ -36,12 +38,33 @@ class REReLU(nn.Module):
             - self.reparametarize_fn(x).detach()
         )
 
+class SiGLU(nn.Module):
+    def __init__(self, dim: int = -1) -> None:
+        """
+        SiGLU activation function. This is equivalent to SwiGLU (Swish variant of Gated Linear Unit) activation function.
+        """
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1, x2 = x.chunk(2, dim=self.dim)
+        return x1 * F.silu(x2)
+
+class TanhExp(nn.Module):
+    def __init__(self) -> None:
+        """
+        TanhExp activation function.
+        """
+        super().__init__()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return TanhExpBase.apply(x)
+
 
 class TanhExpBase(torch.autograd.Function):
     generate_vmap_rule = True
 
     @staticmethod
-    def forward(x: torch.Tensor):
+    def forward(x: torch.Tensor) -> torch.Tensor:
 
         return x * x.exp().tanh()
 
@@ -59,3 +82,4 @@ class TanhExpBase(torch.autograd.Function):
             x.exp().tanh() - (x * x.exp() * (x.exp().tanh() ** 2 - 1))
         )
         return grad_input
+
