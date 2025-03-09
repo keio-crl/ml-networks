@@ -13,9 +13,9 @@ dependencies = [
     "numpy>=2.1",
     "omegaconf>=2.3.0",
     "pytorch-lightning>=2.4.0",
+    "pytorch-optimizer>=3.4.2",
     "schedulefree>=1.4",
     "torch>=2.5",
-    "torch-optimizer>=0.3.0",
     "torchgeometry>=0.1.2",
     "torchvision>=0.19.0",
 ]
