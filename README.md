@@ -7,8 +7,7 @@
 以下のようなコマンドでインストールが可能です．  
 install時はアカウント名とパスワードが求められる場合があります．  
 その場合は，アカウント名にはkeio-crlに登録されているユーザーネーム，パスワードにはトークンを入力してください．  
-トークンの取得方法をこちらに記載しています．  
-[トークンの取得方法](https://docs.github.com/ja/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+トークンの取得方法は[こちら](https://docs.github.com/ja/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)を参照してください．
 
 ```bash
 pip install https://github.com/keio-crl/ml-networks.git
