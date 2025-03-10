@@ -8,10 +8,12 @@ from ml_networks.layers import (PatchEmbed, TransformerLayer,
         ConvTransposeNormActivation, ResidualBlock, 
         ConvNormActivation, PositionalEncoding,
         MLPLayer, LinearNormActivation, SpatialSoftmaxFlatten)
-from ml_networks.config import ConvNetConfig, ViTConfig, ResNetConfig, MLPConfig, LinearConfig, SpatialSoftmaxConfig, ConvConfig
-from ml_networks.utils import conv_out_shape, conv_transpose_in_shape
+from ml_networks.config import (ConvNetConfig, ViTConfig, 
+        ResNetConfig, MLPConfig, 
+        LinearConfig, SpatialSoftmaxConfig, 
+        ConvConfig, TransformerConfig)
+from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_transpose_out_shape
 from einops import rearrange
-
 
 class Encoder(pl.LightningModule):
     """ Encoder + reparameterization
@@ -39,13 +41,10 @@ class Encoder(pl.LightningModule):
 
         if isinstance(backbone_cfg, ViTConfig):
             self.encoder = ViT(obs_shape, backbone_cfg)
-            self.encoder_type = "ViT"
         elif isinstance(backbone_cfg, ConvNetConfig):
             self.encoder = ConvNet(obs_shape, backbone_cfg)
-            self.encoder_type = "CNN"
         elif isinstance(backbone_cfg, ResNetConfig):
             self.encoder = ResNetPixUnshuffle(obs_shape, backbone_cfg)
-            self.encoder_type = "ResNet"
         else:
             raise NotImplementedError(
                 f"{type(backbone_cfg)} is not implemented")
@@ -58,16 +57,16 @@ class Encoder(pl.LightningModule):
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is provided"
         else:
-            assert feature_dim == (self.encoder.last_channel, *self.encoder.conved_shape), f"{feature_shape} != {(self.encoder.last_channel, *self.encoder.conved_shape)}"
+            assert feature_dim == (self.encoder.last_channel, *self.encoder.conved_shape), f"{feature_dim} != {(self.encoder.last_channel, *self.encoder.conved_shape)}"
         if isinstance(fc_cfg, MLPConfig):
             self.fc = nn.Sequential(
                 nn.Flatten(),
-                MLPLayer(self.encoder.conved_size, feature_dim, fc_cfg)
+                MLPLayer(self.conved_size, feature_dim, fc_cfg)
             )
         elif isinstance(fc_cfg, LinearConfig):
             self.fc = nn.Sequential(
                 nn.Flatten(),
-                LinearNormActivation(self.encoder.conved_size, feature_dim, fc_cfg)
+                LinearNormActivation(self.conved_size, feature_dim, fc_cfg)
             )
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
             self.fc = nn.Sequential(
@@ -144,6 +143,43 @@ class Decoder(pl.LightningModule):
         return x.reshape([*batch_shape, *self.obs_shape])
 
 class ViT(nn.Module):
+    """
+    Vision Transformer for Encoder and Decoder
+
+    Parameters
+    ----------
+    in_shape: tuple[int, int, int]
+        shape of input tensor
+    cfg: ViTConfig
+        configuration of the network
+    obs_shape: tuple[int, int, int]
+        shape of output tensor. If None, it is considered as Encoder. Default is None.
+
+    Examples
+    --------
+    >>> in_shape = (3, 64, 64)
+    >>> cfg = ViTConfig(
+    ...     patch_size=8,
+    ...     cls_token=True,
+    ...     transformer_cfg=TransformerConfig(
+    ...         d_model=64,
+    ...         nhead=8,
+    ...         dim_ff=256,
+    ...         n_layers=3,
+    ...         dropout=0.0,
+    ...         hidden_activation="ReLU",
+    ...         output_activation="ReLU"
+    ...     ),
+    ...     init_channel=3
+    ... )
+    >>> encoder = ViT(in_shape, cfg)
+    >>> x = torch.randn(2, *in_shape)
+    >>> y = encoder(x)
+    >>> y.shape
+    torch.Size([2, 1, 64, 64])
+
+
+    """
     def __init__(
         self,
         in_shape: tuple[int, int, int],
@@ -154,7 +190,7 @@ class ViT(nn.Module):
 
         self.in_shape = in_shape
         self.cfg = cfg
-        self.obs_shape = obs_shape
+        self.obs_shape = obs_shape if obs_shape is not None else in_shape
         self.patch_size = cfg.patch_size
 
         self.transformer_cfg = cfg.transformer_cfg
@@ -209,8 +245,8 @@ class ViT(nn.Module):
 
     def unpatchify(self, x: torch.Tensor):
         """
-        x: (N, L, patch_size**2 *3)
-        imgs: (N, 3, H, W)
+        x: (N, L, patch_size**2 * D)
+        imgs: (N, C, H, W)
         """
         p = self.patch_size
         h = self.obs_shape[1] // p
@@ -240,6 +276,40 @@ class ViT(nn.Module):
         return (cfg.init_channel, obs_shape[1], obs_shape[2])
 
 class ResNetPixUnshuffle(nn.Module):
+    """
+    ResNet with PixelUnshuffle for Encoder
+
+    Parameters
+    ----------
+    obs_shape: tuple[int, int, int]
+        shape of input tensor
+    cfg: ResNetConfig 
+        configuration of the network
+
+    Examples
+    --------
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ResNetConfig(
+    ...     conv_channel=64,
+    ...     conv_kernel=3,
+    ...     f_kernel=3,
+    ...     conv_activation="ReLU",
+    ...     out_activation="ReLU",
+    ...     n_res_blocks=2,
+    ...     scale_factor=2,
+    ...     n_scaling=3,
+    ...     norm="batch",
+    ...     norm_cfg={},
+    ...     dropout=0.0
+    ... )
+    >>> encoder = ResNetPixUnshuffle(obs_shape, cfg)
+    >>> x = torch.randn(2, *obs_shape)
+    >>> y = encoder(x)
+    >>> y.shape
+    torch.Size([2, 64, 8, 8])
+
+
+    """
     def __init__(
         self,
         obs_shape: tuple[int, int, int],
@@ -254,7 +324,7 @@ class ResNetPixUnshuffle(nn.Module):
             activation=cfg.conv_activation,
             kernel_size=cfg.f_kernel,
             stride=1,
-            padding=cfg.conv_kernel//2,
+            padding=cfg.f_kernel//2,
             dilation=1,
             groups=1,
             bias=True,
@@ -293,6 +363,7 @@ class ResNetPixUnshuffle(nn.Module):
         cov2_cfg = first_cfg
         cov2_cfg.kernel_size = cfg.conv_kernel
         cov2_cfg.padding = cfg.conv_kernel//2
+        cov2_cfg.scale_factor = 0
 
         # Second conv layer post residual blocks
         self.conv2 = ConvNormActivation(cfg.conv_channel, cfg.conv_channel, cov2_cfg)
@@ -306,6 +377,20 @@ class ResNetPixUnshuffle(nn.Module):
         self.last_channel = cfg.conv_channel
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *obs_shape)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, self.last_channel, *self.conved_shape)
+
+        """
         out = self.conv1(x)
         out1 = self.downsample(out)
         out_res = self.res_blocks(out1)
@@ -317,15 +402,93 @@ class ResNetPixUnshuffle(nn.Module):
 
     @property
     def conved_shape(self):
+        """
+        Get the shape of the output tensor after convolutional layers
+
+        Returns
+        -------
+        tuple[int, int]
+            shape of the output tensor
+        """
         height = self.obs_shape[1] // (self.cfg.scale_factor ** self.cfg.n_scaling)
         width = self.obs_shape[2] // (self.cfg.scale_factor ** self.cfg.n_scaling)
         return (height, width)
 
     @property
     def conved_size(self):
+        """
+        Get the size of the output tensor after convolutional layers
+
+        Returns
+        -------
+        int
+            size of the output tensor
+        """
         return self.last_channel * np.prod(self.conved_shape).item()
 
 class ConvNet(nn.Module):
+    """
+    Convolutional Neural Network for Encoder
+
+    Parameters
+    ----------
+    obs_shape: tuple[int, int, int]
+        shape of input tensor
+    cfg: ConvNetConfig
+        configuration of the network
+
+    Examples
+    --------
+
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ConvNetConfig(
+    ...     channels=[16, 32, 64],
+    ...     conv_cfgs=[
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...     ]
+    ... )
+    >>> encoder = ConvNet(obs_shape, cfg)
+    >>> encoder
+    ConvNet(
+      (conv): Sequential(
+        (0): ConvNormActivation(
+          (conv): Conv2d(3, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (pixel_shuffle): Identity()
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+        (1): ConvNormActivation(
+          (conv): Conv2d(16, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (pixel_shuffle): Identity()
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+        (2): ConvNormActivation(
+          (conv): Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (pixel_shuffle): Identity()
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+      )
+    )
+    >>> x = torch.randn(2, *obs_shape)
+    >>> y = encoder(x)
+    >>> y.shape
+    torch.Size([2, 64, 8, 8])
+
+
+    """
     def __init__(
         self,
         obs_shape: tuple[int, int, int],
@@ -351,6 +514,20 @@ class ConvNet(nn.Module):
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *obs_shape)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, self.last_channel, *self.conved_shape)
+
+        """
 
         x = self.conv(x)
 
@@ -358,6 +535,30 @@ class ConvNet(nn.Module):
 
     @property
     def conved_shape(self):
+        """
+        Get the shape of the output tensor after convolutional layers
+
+        Returns
+        -------
+        tuple[int, int]
+            shape of the output tensor
+
+        Examples
+        --------
+        >>> obs_shape = (3, 64, 64)
+        >>> cfg = ConvNetConfig(
+        ...     channels=[64, 32, 16],
+        ...     conv_cfgs=[
+        ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...     ]
+        ... )
+        >>> encoder = ConvNet(obs_shape, cfg)
+        >>> encoder.conved_shape
+        (8, 8)
+
+        """
         conv_shape = self.obs_shape[1:]
         for i in range(len(self.channels)-1):
             padding, kernel, stride, dilation \
@@ -369,10 +570,55 @@ class ConvNet(nn.Module):
 
     @property
     def conved_size(self):
+        """
+        Get the size of the output tensor after convolutional layers
+
+        Returns
+        -------
+        int
+            size of the output tensor
+
+        """
         return self.last_channel * np.prod(self.conved_shape).item()
 
 
 class ResNetPixShuffle(nn.Module):
+    """
+    ResNet with PixelShuffle
+
+    Parameters
+    ----------
+    in_shape: tuple[int, int, int]
+        shape of input tensor
+    obs_shape: tuple[int, int, int]
+        shape of output tensor
+    cfg: ResNetConfig
+        configuration of the network
+
+    Examples
+    --------
+    >>> in_shape = (128, 16, 16)
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ResNetConfig(
+    ...     conv_channel=64,
+    ...     conv_kernel=3,
+    ...     f_kernel=3,
+    ...     conv_activation="ReLU",
+    ...     out_activation="ReLU",
+    ...     n_res_blocks=2,
+    ...     scale_factor=2,
+    ...     n_scaling=2,
+    ...     norm="batch",
+    ...     norm_cfg={},
+    ...     dropout=0.0
+    ... )
+    >>> decoder = ResNetPixShuffle(in_shape, obs_shape, cfg)
+    >>> x = torch.randn(2, *in_shape)
+    >>> y = decoder(x)
+    >>> y.shape
+    torch.Size([2, 3, 64, 64])
+
+    """
     def __init__(
         self,
         in_shape: tuple[int, int, int],
@@ -454,10 +700,28 @@ class ResNetPixShuffle(nn.Module):
         final_cfg.kernel_size = self.final_kernel
         final_cfg.padding = self.final_kernel//2
         final_cfg.activation = self.out_activation
+        final_cfg.norm = "none"
+        final_cfg.norm_cfg = {}
+        final_cfg.dropout = 0.0
+        final_cfg.scale_factor = 0
         # Final output layer
         self.conv3 = ConvNormActivation(self.conv_channel, out_channels, final_cfg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *in_shape)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, *obs_shape)
+
+        """
 
         out1 = self.conv1(x)
         out = self.res_blocks(out1)
@@ -468,18 +732,87 @@ class ResNetPixShuffle(nn.Module):
 
         return out
 
-    def get_input_shape(self, obs_shape: tuple[int, int, int], cfg: ResNetConfig):
+    @staticmethod
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ResNetConfig):
+        """
+        Get input shape of the decoder
+
+        Parameters
+        ----------
+        obs_shape: tuple[int, int, int]
+            shape of the output tensor
+        cfg: ConvNetConfig
+            configuration of the network
+
+        Returns
+        -------
+        tuple[int, int, int]
+            shape of the input tensor
+
+        """
         return (cfg.init_channel, obs_shape[1]//(cfg.scale_factor**cfg.n_scaling), obs_shape[2]//(cfg.scale_factor**cfg.n_scaling))
 
 class ConvTranspose(nn.Module):
     """
+    Convolutional Transpose Network for Decoder
 
-    Vision Decoder
+    Parameters
+    ----------
+    in_shape: tuple[int, int, int]
+        shape of input tensor
+    obs_shape: tuple[int, int, int]
+        shape of output tensor
+    cfg: ConvNetConfig
+        configuration of the network
 
-    self.sequenceで
-        (batch_size, latent_dim) -> (batch_size, middle_layer_dim)
-        -> (batch_size, W/2 * H/2 * 256) -> (batch_size, C, W, H))
-    になる
+    Examples
+    --------
+    >>> in_shape = (128, 8, 8)
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ConvNetConfig(
+    ...     channels=[64, 32, 16],
+    ...     conv_cfgs=[
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...     ]
+    ... )
+    >>> decoder = ConvTranspose(in_shape, obs_shape, cfg)
+    >>> decoder
+    ConvTranspose(
+      (first_conv): Conv2d(128, 64, kernel_size=(1, 1), stride=(1, 1))
+      (conv): Sequential(
+        (0): ConvTransposeNormActivation(
+          (conv): ConvTranspose2d(64, 32, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+        (1): ConvTransposeNormActivation(
+          (conv): ConvTranspose2d(32, 16, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+        (2): ConvTransposeNormActivation(
+          (conv): ConvTranspose2d(16, 3, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (norm): BatchNorm2d(3, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+      )
+    )
+    >>> x = torch.randn(2, *in_shape)
+    >>> y = decoder(x)
+    >>> y.shape
+    torch.Size([2, 3, 64, 64])
+
 
     """
 
@@ -504,17 +837,32 @@ class ConvTranspose(nn.Module):
             self.init_channel = in_shape[0]
             self.have_first_conv = False
 
-        prev_shape = in_shape
+        prev_shape = in_shape[1:]
         for conv_cfg in cfg.conv_cfgs:
             padding, kernel, stride, dilation \
             = conv_cfg.padding, conv_cfg.kernel_size, conv_cfg.stride, conv_cfg.dilation
-            prev_shape = conv_out_shape(prev_shape, padding, kernel, stride, dilation)
+            prev_shape = conv_transpose_out_shape(prev_shape, padding, kernel, stride, dilation)
             self.conv_out_shapes += [prev_shape]
         assert self.conv_out_shapes[-1] == obs_shape[1:], f"{self.conv_out_shapes[-1]} != {obs_shape[1:]}"
 
         self.conv = self._build_conv()
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        z: torch.Tensor
+            input tensor of shape (batch_size, *in_shape)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, *obs_shape)
+
+
+        """
         if self.have_first_conv:
             z = self.first_conv(z)
         reconstruct = self.conv(z)
@@ -529,13 +877,37 @@ class ConvTranspose(nn.Module):
 
         return nn.Sequential(*convs)
 
-    @property
-    def conved_size(self):
-        conved_size = self.init_channel * np.prod(self.conv_shapes[-1]).item()
-        print(f"conved_size: {conved_size}")
-        return conved_size
+    @staticmethod
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ConvNetConfig):
+        """
+        Get input shape of the decoder
 
-    def get_input_shape(self, obs_shape: tuple[int, int, int], cfg: ConvNetConfig):
+        Parameters
+        ----------
+        obs_shape: tuple[int, int, int]
+            shape of the output tensor
+        cfg: ConvNetConfig
+            configuration of the network
+
+        Returns
+        -------
+        tuple[int, int, int]
+            shape of the input tensor
+
+        Examples
+        --------
+        >>> obs_shape = (3, 64, 64)
+        >>> cfg = ConvNetConfig(
+        ...     channels=[64, 32, 16],
+        ...     conv_cfgs=[
+        ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+        ...     ]
+        ... )
+        >>> ConvTranspose.get_input_shape(obs_shape, cfg)
+        (16, 8, 8)
+        """
         in_shape = obs_shape[1:]
         for conv_cfg in reversed(cfg.conv_cfgs):
             padding, kernel, stride, dilation \
@@ -543,3 +915,7 @@ class ConvTranspose(nn.Module):
             in_shape = conv_transpose_in_shape(
                 in_shape, padding, kernel, stride, dilation)
         return (cfg.init_channel, *in_shape)
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
