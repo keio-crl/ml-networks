@@ -20,6 +20,11 @@ install時はアカウント名とパスワードが求められる場合があ�
 主要なものたちを以下に示します．  
 詳細な説明は[こちら](https://github.com/keio-crl/ml-networks.git)(in coming).
 
+### 目次
+1. [MLP](#MLP)
+2. [Encoder](#Encoder)
+3. [Decoder](#Decoder)
+
 ### MLP
 
 ```python
