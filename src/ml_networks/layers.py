@@ -1,35 +1,34 @@
+from typing import Literal
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
-import torch.nn as nn
-from ml_networks.activations import Activation
-from ml_networks.config import (MLPConfig, ConvConfig, 
-    TransformerConfig, LinearConfig, SpatialSoftmaxConfig)
-from typing import Tuple
-from einops import rearrange
-from typing import Literal
-from omegaconf import DictConfig
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
+from omegaconf import DictConfig
+from torch import nn
 from torchgeometry.contrib import spatial_soft_argmax2d
 
+from ml_networks.activations import Activation
+from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
 
-def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs):
+
+def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs) -> nn.Module:
     """
     Get normalization layer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     norm : Literal["layer", "rms", "group", "batch", "none"]
         Normalization layer. If it's set to "none", normalization is not applied.
     kwargs : dict
         Normalization layer configuration.
 
-    Returns:
-    --------
+    Returns
+    -------
     nn.Module
         Normalization layer.
 
-    Examples:
+    Examples
     --------
     >>> cfg = {"normalized_shape": 1, "eps": 1e-05, "elementwise_affine": True, "bias": True}
     >>> norm = get_norm("layer", **cfg)
@@ -58,37 +57,37 @@ def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs):
     """
     if norm == "layer":
         return nn.LayerNorm(**kwargs)
-    elif norm == "rms":
+    if norm == "rms":
         return nn.RMSNorm(**kwargs)
-    elif norm == "group":
+    if norm == "group":
         return nn.GroupNorm(**kwargs)
-    elif norm == "batch":
+    if norm == "batch":
         return nn.BatchNorm2d(**kwargs)
-    else:
-        return nn.Identity()
+    return nn.Identity()
+
 
 class LinearNormActivation(nn.Module):
     """
     Linear layer with normalization and activation, and dropouts.
-    
-    References:
-    -----------
+
+    References
+    ----------
     LayerNorm: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
     RMSNorm: https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html
     Linear: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
     Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     input_dim : int
         Input dimension.
     output_dim : int
         Output dimension.
     cfg : LinearConfig
         Linear layer configuration.
-    
-    Examples:
-    ---------
+
+    Examples
+    --------
     >>> cfg = LinearConfig(
     ...     activation="ReLU",
     ...     norm="layer",
@@ -138,19 +137,20 @@ class LinearNormActivation(nn.Module):
 
 
     """
+
     def __init__(
-        self, 
+        self,
         input_dim: int,
         output_dim: int,
-        cfg: LinearConfig
-        ):
+        cfg: LinearConfig,
+    ) -> None:
         super().__init__()
         self.linear = nn.Linear(
-            input_dim, 
-            output_dim*2 if "glu" in cfg.activation.lower() else output_dim, 
-            bias=cfg.bias
+            input_dim,
+            output_dim * 2 if "glu" in cfg.activation.lower() else output_dim,
+            bias=cfg.bias,
         )
-        cfg.norm_cfg["normalized_shape"] = output_dim*2 if "glu" in cfg.activation.lower() else output_dim
+        cfg.norm_cfg["normalized_shape"] = output_dim * 2 if "glu" in cfg.activation.lower() else output_dim
         self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation)
         if cfg.dropout > 0:
@@ -161,15 +161,15 @@ class LinearNormActivation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (*, input_dim)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (*, output_dim)
         """
@@ -190,16 +190,16 @@ class MLPLayer(pl.LightningModule):
     """
     Multi-layer perceptron layer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     input_dim : int
         Input dimension.
     output_dim : int
         Output dimension.
     cfg : MLPConfig
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> cfg = MLPConfig(
     ...     hidden_dim=16,
     ...     n_layers=3,
@@ -220,11 +220,13 @@ class MLPLayer(pl.LightningModule):
     torch.Size([1, 16])
 
     """
-    def __init__(self, 
-                 input_dim: int, 
-                 output_dim: int, 
-                 cfg: MLPConfig
-                 ):
+
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        cfg: MLPConfig,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.input_dim = input_dim
@@ -233,34 +235,34 @@ class MLPLayer(pl.LightningModule):
         self.n_layers = cfg.n_layers
         self.dense = self._build_dense()
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (*, input_dim)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (*, output_dim)
 
         """
         return self.dense(x)
 
-    def _build_dense(self):
+    def _build_dense(self) -> nn.Module:
         """
-        Build dense layers
+        Build dense layers.
 
-        Returns:
-        --------
+        Returns
+        -------
         nn.Sequential
             Dense layers
 
-        Examples:
-        ---------
+        Examples
+        --------
         >>> cfg = MLPConfig(
         ...     hidden_dim=64,
         ...     n_layers=2,
@@ -312,12 +314,13 @@ class MLPLayer(pl.LightningModule):
         layers += [LinearNormActivation(self.hidden_dim, self.output_dim, last_cfg)]
         return nn.Sequential(*layers)
 
+
 class ConvNormActivation(nn.Module):
     """
     Convolutional layer with normalization and activation, and dropouts.
 
-    References:
-    -----------
+    References
+    ----------
     PixelShuffle: https://pytorch.org/docs/stable/generated/torch.nn.PixelShuffle.html
     PixelUnshuffle: https://pytorch.org/docs/stable/generated/torch.nn.PixelUnshuffle.html
     BatchNorm2d: https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
@@ -327,8 +330,8 @@ class ConvNormActivation(nn.Module):
     Conv2d: https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
     Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     in_channels : int
         Input channels.
     out_channels : int
@@ -336,8 +339,8 @@ class ConvNormActivation(nn.Module):
     cfg : ConvConfig
         Convolutional layer configuration.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> cfg = ConvConfig(
     ...     activation="ReLU",
     ...     kernel_size=3,
@@ -377,12 +380,13 @@ class ConvNormActivation(nn.Module):
     torch.Size([1, 16, 64, 64])
 
     """
+
     def __init__(
-        self, 
-        in_channels: int, 
-        out_channels: int, 
-        cfg: ConvConfig
-        ):
+        self,
+        in_channels: int,
+        out_channels: int,
+        cfg: ConvConfig,
+    ) -> None:
         super().__init__()
         kernel_size: int = cfg.kernel_size
         stride: int = cfg.stride
@@ -397,20 +401,20 @@ class ConvNormActivation(nn.Module):
         scale_factor: int = cfg.scale_factor
         _out_channels = out_channels
         if "glu" in activation.lower():
-            _out_channels = _out_channels*2
+            _out_channels *= 2
         if scale_factor > 0:
-            _out_channels = _out_channels * (abs(scale_factor)**2)
+            _out_channels *= abs(scale_factor) ** 2
         elif scale_factor < 0:
-            _out_channels = _out_channels // (abs(scale_factor)**2)
+            _out_channels //= abs(scale_factor) ** 2
         self.conv = nn.Conv2d(
-            in_channels, 
+            in_channels,
             _out_channels,
-            kernel_size, 
-            stride, 
-            padding, 
-            dilation, 
-            groups, 
-            bias=bias
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            bias=bias,
         )
         if norm != "none" and norm != "group":
             norm_cfg["num_features"] = _out_channels
@@ -429,15 +433,15 @@ class ConvNormActivation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, in_channels, H, W) or (in_channels, H, W)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, out_channels, H', W') or (out_channels, H', W')
         H' and W' are calculated as follows:
@@ -451,15 +455,15 @@ class ConvNormActivation(nn.Module):
         x = self.norm(x)
         x = self.pixel_shuffle(x)
         x = self.activation(x)
-        x = self.dropout(x)
-        return x
+        return self.dropout(x)
+
 
 class ResidualBlock(nn.Module):
     """
     Residual block.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     in_features : int
         Input features.
     kernel_size : int
@@ -473,85 +477,86 @@ class ResidualBlock(nn.Module):
     dropout : float
         Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> resblock = ResidualBlock(16, 3, "ReLU", "batch", {}, 0.1)
     >>> x = torch.randn(1, 16, 32, 32)
     >>> output = resblock(x)
     >>> output.shape
     torch.Size([1, 16, 32, 32])
     """
+
     def __init__(
-        self, 
-        in_features: int, 
+        self,
+        in_features: int,
         kernel_size: int,
         activation: str = "ReLU",
         norm: Literal["batch", "group", "none"] = "none",
         norm_cfg: DictConfig = DictConfig({}),
-        dropout: float = 0.0
-        ):
-
+        dropout: float = 0.0,
+    ) -> None:
         super(ResidualBlock, self).__init__()
         first_cfg = ConvConfig(
-            activation=activation, 
-            kernel_size=kernel_size, 
-            stride=1, 
-            padding=(kernel_size-1)//2, 
-            dilation=1, 
-            groups=1, 
-            bias=True, 
-            dropout=dropout, 
-            norm=norm, 
-            norm_cfg=norm_cfg
+            activation=activation,
+            kernel_size=kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
+            dilation=1,
+            groups=1,
+            bias=True,
+            dropout=dropout,
+            norm=norm,
+            norm_cfg=norm_cfg,
         )
         second_cfg = ConvConfig(
-            activation="Identity", 
-            kernel_size=kernel_size, 
-            stride=1, 
-            padding=(kernel_size-1)//2, 
-            dilation=1, 
-            groups=1, 
-            bias=True, 
-            dropout=dropout, 
-            norm=norm, 
-            norm_cfg=norm_cfg
+            activation="Identity",
+            kernel_size=kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
+            dilation=1,
+            groups=1,
+            bias=True,
+            dropout=dropout,
+            norm=norm,
+            norm_cfg=norm_cfg,
         )
         self.conv_block = nn.Sequential(
             ConvNormActivation(
-                in_features, 
-                in_features, 
-                first_cfg
+                in_features,
+                in_features,
+                first_cfg,
             ),
             ConvNormActivation(
-                in_features, 
-                in_features*2 if "glu" in activation.lower() else in_features, 
-                second_cfg
-            )
+                in_features,
+                in_features * 2 if "glu" in activation.lower() else in_features,
+                second_cfg,
+            ),
         )
         self.activation = Activation(activation, dim=-3)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, in_features, H, W) or (in_features, H, W)
-        
-        Returns:
-        --------
+
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, in_features, H, W) or (in_features, H, W)
         """
         return self.activation(x + self.conv_block(x))
 
+
 class ConvTransposeNormActivation(nn.Module):
     """
     Transposed convolutional layer with normalization and activation, and dropouts.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     in_channels : int
         Input channels.
     out_channels : int
@@ -559,8 +564,8 @@ class ConvTransposeNormActivation(nn.Module):
     cfg : ConvConfig
         Convolutional layer configuration.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> cfg = ConvConfig(
     ...     activation="ReLU",
     ...     kernel_size=3,
@@ -599,44 +604,45 @@ class ConvTransposeNormActivation(nn.Module):
     >>> output.shape
     torch.Size([1, 16, 32, 32])
     """
+
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
-        cfg: ConvConfig
-        ):
+        cfg: ConvConfig,
+    ) -> None:
         super().__init__()
 
         self.conv = nn.ConvTranspose2d(
             in_channels,
-            out_channels*2 if "glu" in cfg.activation.lower() else out_channels,
+            out_channels * 2 if "glu" in cfg.activation.lower() else out_channels,
             cfg.kernel_size,
             cfg.stride,
             cfg.padding,
             cfg.output_padding,
             cfg.groups,
             bias=cfg.bias,
-            dilation=cfg.dilation
+            dilation=cfg.dilation,
         )
-        if cfg.norm != "none" and cfg.norm != "group":
-            cfg.norm_cfg["num_features"] = out_channels*2 if "glu" in cfg.activation.lower() else out_channels
+        if cfg.norm not in {"none", "group"}:
+            cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
-            cfg.norm_cfg["num_channels"] = out_channels*2 if "glu" in cfg.activation.lower() else out_channels
+            cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-3)
         self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, in_channels, H, W) or (in_channels, H, W)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, out_channels, H', W') or (out_channels, H', W')
         H' and W' are calculated as follows:
@@ -646,17 +652,15 @@ class ConvTransposeNormActivation(nn.Module):
         x = self.conv(x)
         x = self.norm(x)
         x = self.activation(x)
-        x = self.dropout(x)
-        return x
-
+        return self.dropout(x)
 
 
 class TransformerLayer(nn.Module):
     """
     Transformer layer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     input_dim : int
         Input dimension.
     output_dim : int
@@ -664,8 +668,8 @@ class TransformerLayer(nn.Module):
     cfg : TransformerConfig
         Transformer layer configuration.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> cfg = TransformerConfig(
     ...     d_model=16,
     ...     nhead=4,
@@ -682,12 +686,13 @@ class TransformerLayer(nn.Module):
     torch.Size([1, 8, 16])
 
     """
+
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        cfg: TransformerConfig
-    ):
+        cfg: TransformerConfig,
+    ) -> None:
         super().__init__()
         self.d_model = cfg.d_model
         self.input_dim = input_dim
@@ -695,66 +700,73 @@ class TransformerLayer(nn.Module):
         self.nhead = cfg.nhead
         self.dim_feedforward = cfg.dim_ff
         self.n_layers = cfg.n_layers
-        self.in_proj = nn.Sequential(
-            nn.Linear(input_dim, cfg.d_model),
-            nn.LayerNorm(cfg.d_model),
-            Activation(cfg.hidden_activation)
-        ) if input_dim != cfg.d_model else nn.Identity()
-        self.out_proj = nn.Sequential(
-            nn.Linear(cfg.d_model, output_dim),
-            Activation(cfg.output_activation)
-        ) if output_dim else Activation(cfg.output_activation)
-
-        self.transformer_layer = nn.TransformerEncoderLayer(
-            d_model=self.d_model, 
-            nhead=self.nhead, 
-            dim_feedforward=self.dim_feedforward,
-            activation=cfg.hidden_activation.lower(), 
-            dropout=cfg.dropout, 
-            batch_first=True
+        self.in_proj = (
+            nn.Sequential(
+                nn.Linear(input_dim, cfg.d_model),
+                nn.LayerNorm(cfg.d_model),
+                Activation(cfg.hidden_activation),
             )
-
-        self.transformer = nn.TransformerEncoder(
-            self.transformer_layer, 
-            num_layers=self.n_layers, 
-            enable_nested_tensor=True
+            if input_dim != cfg.d_model
+            else nn.Identity()
+        )
+        self.out_proj = (
+            nn.Sequential(
+                nn.Linear(cfg.d_model, output_dim),
+                Activation(cfg.output_activation),
+            )
+            if output_dim
+            else Activation(cfg.output_activation)
         )
 
-    def forward(self, x: torch.Tensor):
-        """
-        Forward pass
+        self.transformer_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=self.nhead,
+            dim_feedforward=self.dim_feedforward,
+            activation=cfg.hidden_activation.lower(),
+            dropout=cfg.dropout,
+            batch_first=True,
+        )
 
-        Parameters:
-        -----------
+        self.transformer = nn.TransformerEncoder(
+            self.transformer_layer,
+            num_layers=self.n_layers,
+            enable_nested_tensor=True,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, L, input_dim)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, L, output_dim)
         """
         x = self.in_proj(x)
         x = self.transformer(x)
-        x = self.out_proj(x)
-        return x
+        return self.out_proj(x)
 
 
 class PositionalEncoding(nn.Module):
     """
     Positional encoding.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     d_model : int
         Dimension of model.
     dropout : float
-        Dropout rate. If it's set to 0.0, dropout is not applied. 
+        Dropout rate. If it's set to 0.0, dropout is not applied.
     max_len : int
-        Maximum length. 
+        Maximum length.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> pos_enc = PositionalEncoding(16, 0.1, 100)
     >>> x = torch.randn(1, 8, 16)
     >>> output = pos_enc(x)
@@ -768,34 +780,33 @@ class PositionalEncoding(nn.Module):
 
     """
 
-    def __init__(self, d_model: int, dropout: float, max_len: int):
+    def __init__(self, d_model: int, dropout: float, max_len: int) -> None:
         super().__init__()
 
         self.dropout = nn.Dropout(p=dropout) if dropout > 0 else nn.Identity()
 
         position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2)
-                             * (-np.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
         pe = torch.zeros(1, max_len, d_model)
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, L, D)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, L, D)
         """
-        x = x + self.pe[:, :x.size(1)]
+        x = x + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
 
@@ -803,8 +814,8 @@ class PatchEmbed(nn.Module):
     """
     Patch embedding layer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     emb_dim : int
         Embedding dimension.
     patch_size : int
@@ -812,32 +823,31 @@ class PatchEmbed(nn.Module):
     obs_shape : Tuple[int, int, int]
         Observation shape.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> patch_embed = PatchEmbed(16, 4, (3, 32, 32))
     >>> x = torch.randn(1, 3, 32, 32)
     >>> output = patch_embed(x)
     >>> output.shape
     torch.Size([1, 64, 16])
-
     """
-    def __init__(
-        self, emb_dim: int, patch_size: int, obs_shape: Tuple[int, int, int]
-    ):
-        super(PatchEmbed, self).__init__()
-        self.emb_dim = emb_dim
-        # パッチの数
 
+    def __init__(
+        self,
+        emb_dim: int,
+        patch_size: int,
+        obs_shape: tuple[int, int, int],
+    ) -> None:
+        super().__init__()
+        self.emb_dim = emb_dim
         self.obs_shape = obs_shape
 
         # パッチの大きさ
         self.patch_size = patch_size
-        self.patch_num = (obs_shape[1] // patch_size) * \
-            (obs_shape[2] // patch_size)
-        assert (
-            self.patch_size * self.patch_size * self.patch_num
-            == self.obs_shape[1] * self.obs_shape[2]
-        ), "patch_num is not correct"
+        self.patch_num = (obs_shape[1] // patch_size) * (obs_shape[2] // patch_size)
+        assert self.patch_size * self.patch_size * self.patch_num == self.obs_shape[1] * self.obs_shape[2], (
+            "patch_num is not correct"
+        )
 
         # 入力画像のパッチへの分割 & パッチの埋め込みを一気に行う層
         self.patch_emb_layer = nn.Conv2d(
@@ -849,22 +859,22 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         x : torch.Tensor
             Input tensor of shape (B, C, H, W)
 
-        Returns:
-        --------
+        Returns
+        -------
         torch.Tensor
             Output tensor of shape (B, Np, D)
 
         Np is the number of patches.
             Np = H*W/Pˆ2
         D is the embedding dimension.
-            
+
         """
         # パッチの埋め込み & flatten [式(3)]
         # パッチの埋め込み (B, C, H, W) -> (B, D, H/P, W/P)
@@ -872,26 +882,24 @@ class PatchEmbed(nn.Module):
         x = self.patch_emb_layer(x)
 
         # パッチのflatten (B, D, H/P, W/P) -> (B, D, Np)
-        # ここで、Npはパッチの数(=H*W/Pˆ2)
+        # ここで、Np はパッチの数( = H*W/Pˆ2)
         x = x.flatten(2)
 
         # 軸の入れ替え (B, D, Np) -> (B, Np, D)
-        x = x.transpose(1, 2)
-
-        return x
+        return x.transpose(1, 2)
 
 
 class SpatialSoftmaxFlatten(nn.Module):
     """
     Spatial Softmax and Flatten layer.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     cfg : SpatialSoftmaxConfig
         Spatial softmax configuration.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> cfg = SpatialSoftmaxConfig(temperature=1.0)
     >>> spatial_softmax_flatten = SpatialSoftmaxFlatten(cfg)
     >>> x = torch.randn(1, 64, 16, 16)
@@ -900,8 +908,9 @@ class SpatialSoftmaxFlatten(nn.Module):
     torch.Size([1, 128])
 
     """
-    def __init__(self, cfg: SpatialSoftmaxConfig):
-        super(SpatialSoftmaxFlatten, self).__init__()
+
+    def __init__(self, cfg: SpatialSoftmaxConfig) -> None:
+        super().__init__()
         temperature = cfg.temperature
         assert temperature >= 0.0, "temperature must be non-negative"
         if temperature > 0.0:
@@ -919,22 +928,26 @@ class SpatialSoftmaxFlatten(nn.Module):
             x: Spatial Softmaxを適用した特徴量。形状は、(B, N, H, W)。
         """
         x = spatial_softmax2d(x, self.temperature)
-        x = spatial_expectation2d(x)
-        return x
-
+        return spatial_expectation2d(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        引数:
-            x: 入力特徴量。形状は、(B, N, H, W)
-                B: バッチサイズ、N: トークン数、H: 高さ、W: 幅
-        返り値:
-            x: Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
+        順伝播.
+
+        Parameters
+        ----------
+        x: 入力特徴量。形状は、(B, N, H, W)
+            B: バッチサイズ、N: トークン数、H: 高さ、W: 幅
+
+        Returns
+        -------
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
         """
         x = self.spatial_softmax(x)
-        x = x.flatten(1)
-        return x
+        return x.flatten(1)
+
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

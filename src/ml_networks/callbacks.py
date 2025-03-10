@@ -1,14 +1,16 @@
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import RichProgressBar
-from pytorch_lightning.callbacks.progress.rich_progress import \
-    RichProgressBarTheme
-from schedulefree import RAdamScheduleFree, SGDScheduleFree
-from pytorch_optimizer import ScheduleFreeSGD, ScheduleFreeRAdam, ScheduleFreeAdamW
-from typing import Union, Iterable
+# ruff: noqa: ARG002
 
-ScheduleFreeOptimizers = Union[RAdamScheduleFree, SGDScheduleFree, 
-                               ScheduleFreeSGD, ScheduleFreeRAdam, 
-                               ScheduleFreeAdamW]
+from collections.abc import Iterable
+
+import pytorch_lightning as pl
+import torch
+from pytorch_lightning.callbacks import RichProgressBar
+from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from pytorch_optimizer import ScheduleFreeAdamW, ScheduleFreeRAdam, ScheduleFreeSGD
+from schedulefree import RAdamScheduleFree, SGDScheduleFree
+
+ScheduleFreeOptimizers = RAdamScheduleFree | SGDScheduleFree | ScheduleFreeSGD | ScheduleFreeRAdam | ScheduleFreeAdamW
+
 
 class ProgressBarCallback(RichProgressBar):
     """
@@ -32,18 +34,15 @@ class ProgressBarCallback(RichProgressBar):
         )
         super().__init__(theme=theme)
 
-class SwitchOptimizer(pl.Callback):
-    def __init__(self):
-        super().__init__()
 
+class SwitchOptimizer(pl.Callback):
     def on_before_optimizer_step(
         self,
         trainer: pl.Trainer,
         pl_module: pl.LightningModule,
-        optimizer,
+        optimizer: torch.optim.Optimizer,
         opt_idx: int = 0,
-        ):
-
+    ) -> None:
         optimizer = pl_module.optimizers()
         if isinstance(optimizer, ScheduleFreeOptimizers):
             optimizer.train()
@@ -81,7 +80,7 @@ class SwitchOptimizer(pl.Callback):
     def on_validation_end(
         self,
         trainer: pl.Trainer,
-        pl_module: pl.LightningModule
+        pl_module: pl.LightningModule,
     ) -> None:
         optimizer = pl_module.optimizers()
         if isinstance(optimizer, ScheduleFreeOptimizers):
@@ -90,5 +89,3 @@ class SwitchOptimizer(pl.Callback):
             for opt in optimizer:
                 if isinstance(opt, ScheduleFreeOptimizers):
                     opt.eval()
-
-      
