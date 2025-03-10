@@ -34,7 +34,8 @@ class Encoder(pl.LightningModule):
     Parameters
     ----------
     feature_dim: Union[int, tuple[int, int, int]]
-        dimension of the feature tensor, if int, Encoder includes full connection layer to downsample the feature tensor.
+        Dimension of the feature tensor.
+        If int, Encoder includes full connection layer to downsample the feature tensor.
         Otherwise, Encoder does not include full connection layer and directly process with backbone network.
     obs_shape: tuple[int, int, int]
         shape of the input tensor
@@ -120,7 +121,7 @@ class Encoder(pl.LightningModule):
         feature_dim: int | tuple[int, int, int],
         obs_shape: tuple[int, int, int],
         backbone_cfg: ViTConfig | ConvNetConfig | ResNetConfig,
-        fc_cfg: MLPConfig | LinearConfig | SpatialSoftmaxConfig = None,
+        fc_cfg: MLPConfig | LinearConfig | SpatialSoftmaxConfig | None = None,
     ) -> None:
         super().__init__()
 
@@ -300,7 +301,7 @@ class Decoder(pl.LightningModule):
         feature_dim: int | tuple[int, int, int],
         obs_shape: tuple[int, int, int],
         backbone_cfg: ConvNetConfig | ViTConfig | ResNetConfig,
-        fc_cfg: MLPConfig | LinearConfig = None,
+        fc_cfg: MLPConfig | LinearConfig | None = None,
     ) -> None:
         super().__init__()
 
@@ -489,7 +490,8 @@ class ViT(nn.Module):
             パッチ化した画像. (N, L, patch_size**2 * D)
         """
         p = self.patch_size
-        assert imgs.shape[-1] % p == 0 and imgs.shape[-2] % p == 0
+        assert imgs.shape[-1] % p == 0
+        assert imgs.shape[-2] % p == 0
         return rearrange(imgs, "n c (h p1) (w p2) -> n (h w) (p1 p2 c)", p1=p, p2=p)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
@@ -604,18 +606,17 @@ class ResNetPixUnshuffle(nn.Module):
         self.downsample = nn.Sequential(*downsample)
 
         # Residual blocks
-        res_blocks = []
-        for _ in range(cfg.n_res_blocks):
-            res_blocks.append(
-                ResidualBlock(
-                    cfg.conv_channel,
-                    cfg.conv_kernel,
-                    cfg.conv_activation,
-                    cfg.norm,
-                    cfg.norm_cfg,
-                    cfg.dropout,
-                ),
+        res_blocks = [
+            ResidualBlock(
+                cfg.conv_channel,
+                cfg.conv_kernel,
+                cfg.conv_activation,
+                cfg.norm,
+                cfg.norm_cfg,
+                cfg.dropout,
             )
+            for _ in range(cfg.n_res_blocks)
+        ]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         cov2_cfg = first_cfg
@@ -902,9 +903,8 @@ class ResNetPixShuffle(nn.Module):
 
         out_channels = obs_shape[0]
         self.input_height, self.input_width = height // self._scaling_factor, width // self._scaling_factor
-        assert self.input_height == in_shape[1] and self.input_width == in_shape[2], (
-            f"{self.input_height} != {in_shape[1]} and {self.input_width} != {in_shape[2]}"
-        )
+        assert self.input_height == in_shape[1], f"{self.input_height} != {in_shape[1]}"
+        assert self.input_width == in_shape[2], f"{self.input_width} != {in_shape[2]}"
 
         conv_cfg = ConvConfig(
             activation=self.conv_activation,
@@ -923,18 +923,17 @@ class ResNetPixShuffle(nn.Module):
         self.conv1 = ConvNormActivation(in_shape[0], self.conv_channel, conv_cfg)
 
         # Residual blocks
-        res_blocks = []
-        for _ in range(self.n_res_blocks):
-            res_blocks.append(
-                ResidualBlock(
-                    self.conv_channel,
-                    self.conv_kernel,
-                    self.conv_activation,
-                    self.norm,
-                    self.norm_cfg,
-                    self.dropout,
-                ),
+        res_blocks = [
+            ResidualBlock(
+                self.conv_channel,
+                self.conv_kernel,
+                self.conv_activation,
+                self.norm,
+                self.norm_cfg,
+                self.dropout,
             )
+            for _ in range(self.n_res_blocks)
+        ]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # Second conv layer post residual blocks
@@ -1130,7 +1129,6 @@ class ConvTranspose(nn.Module):
         convs = []
         for i, cfg in enumerate(self.cfg.conv_cfgs):
             convs += [ConvTransposeNormActivation(self.channels[i], self.channels[i + 1], cfg)]
-
         return nn.Sequential(*convs)
 
     @staticmethod
@@ -1174,9 +1172,3 @@ class ConvTranspose(nn.Module):
             )
             in_shape = conv_transpose_in_shape(in_shape, padding, kernel, stride, dilation)
         return (cfg.init_channel, *in_shape)
-
-
-if __name__ == "__main__":
-    import doctest
-
-    doctest.testmod()
