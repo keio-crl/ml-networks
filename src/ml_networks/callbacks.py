@@ -1,15 +1,15 @@
+# ruff: noqa: ARG002
+
 from collections.abc import Iterable
-from typing import Union
 
 import pytorch_lightning as pl
+import torch
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from pytorch_optimizer import ScheduleFreeAdamW, ScheduleFreeRAdam, ScheduleFreeSGD
 from schedulefree import RAdamScheduleFree, SGDScheduleFree
 
-ScheduleFreeOptimizers = Union[
-    RAdamScheduleFree, SGDScheduleFree, ScheduleFreeSGD, ScheduleFreeRAdam, ScheduleFreeAdamW,
-]
+ScheduleFreeOptimizers = RAdamScheduleFree | SGDScheduleFree | ScheduleFreeSGD | ScheduleFreeRAdam | ScheduleFreeAdamW
 
 
 class ProgressBarCallback(RichProgressBar):
@@ -36,16 +36,13 @@ class ProgressBarCallback(RichProgressBar):
 
 
 class SwitchOptimizer(pl.Callback):
-    def __init__(self):
-        super().__init__()
-
     def on_before_optimizer_step(
         self,
         trainer: pl.Trainer,
         pl_module: pl.LightningModule,
-        optimizer,
+        optimizer: torch.optim.Optimizer,
         opt_idx: int = 0,
-    ):
+    ) -> None:
         optimizer = pl_module.optimizers()
         if isinstance(optimizer, ScheduleFreeOptimizers):
             optimizer.train()

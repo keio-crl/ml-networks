@@ -403,9 +403,9 @@ class ConvNormActivation(nn.Module):
         if "glu" in activation.lower():
             _out_channels *= 2
         if scale_factor > 0:
-            _out_channels *= (abs(scale_factor) ** 2)
+            _out_channels *= abs(scale_factor) ** 2
         elif scale_factor < 0:
-            _out_channels //= (abs(scale_factor) ** 2)
+            _out_channels //= abs(scale_factor) ** 2
         self.conv = nn.Conv2d(
             in_channels,
             _out_channels,
@@ -928,20 +928,23 @@ class SpatialSoftmaxFlatten(nn.Module):
             x: Spatial Softmaxを適用した特徴量。形状は、(B, N, H, W)。
         """
         x = spatial_softmax2d(x, self.temperature)
-        x = spatial_expectation2d(x)
-        return x
+        return spatial_expectation2d(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        引数:
-            x: 入力特徴量。形状は、(B, N, H, W)
-                B: バッチサイズ、N: トークン数、H: 高さ、W: 幅
-        返り値:
-            x: Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
+        順伝播.
+
+        Parameters
+        ----------
+        x: 入力特徴量。形状は、(B, N, H, W)
+            B: バッチサイズ、N: トークン数、H: 高さ、W: 幅
+
+        Returns
+        -------
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
         """
         x = self.spatial_softmax(x)
-        x = x.flatten(1)
-        return x
+        return x.flatten(1)
 
 
 if __name__ == "__main__":

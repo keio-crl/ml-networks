@@ -11,7 +11,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 
-def conv_out(h_in, padding, kernel_size, stride, dilation=1):
+def conv_out(h_in: int, padding: int, kernel_size: int, stride: int, dilation: int = 1) -> int:
     """
     Calculate the output size of convolutional layer.
 
@@ -45,12 +45,19 @@ def conv_out(h_in, padding, kernel_size, stride, dilation=1):
     return int((h_in + 2.0 * padding - dilation * (kernel_size - 1.0) - 1.0) / stride + 1.0)
 
 
-def conv_transpose_out(h_in, padding, kernel_size, stride, dilation=1, output_padding=0):
+def conv_transpose_out(
+    h_in: int,
+    padding: int,
+    kernel_size: int,
+    stride: int,
+    dilation: int = 1,
+    output_padding: int = 0,
+) -> int:
     """
     Calculate the output size of transposed convolutional layer.
 
-    Args:
-    -----
+    Parameters
+    ----------
     h_in : int
         Input size.
     padding : int
@@ -124,7 +131,7 @@ def conv_transpose_in(h_out, padding, kernel_size, stride, dilation=1, output_pa
     return int((h_out - output_padding - 1 + 2 * padding - dilation * (kernel_size - 1)) / stride + 1)
 
 
-def output_padding(h_in, h_out, padding, kernel_size, stride, dilation=1):
+def output_padding(h_in: int, h_out: int, padding: int, kernel_size: int, stride: int, dilation: int = 1) -> int:
     """
     Calculate the output padding size of transposed convolutional layer.
 
@@ -161,7 +168,13 @@ def output_padding(h_in, h_out, padding, kernel_size, stride, dilation=1):
     return h_in - (h_out - 1) * stride + 2 * padding - dilation * (kernel_size - 1) - 1
 
 
-def conv_out_shape(shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int = 1):
+def conv_out_shape(
+    shape: tuple[int, ...],
+    padding: int,
+    kernel_size: int,
+    stride: int,
+    dilation: int = 1,
+) -> tuple[int, ...]:
     """
     Calculate the output size of convolutional layer.
 
@@ -196,8 +209,13 @@ def conv_out_shape(shape: tuple[int, ...], padding: int, kernel_size: int, strid
 
 
 def conv_transpose_out_shape(
-    in_shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int = 1, output_padding: int = 0,
-):
+    in_shape: tuple[int, ...],
+    padding: int,
+    kernel_size: int,
+    stride: int,
+    dilation: int = 1,
+    output_padding: int = 0,
+) -> tuple[int, ...]:
     """
     Calculate the output size of transposed convolutional layer.
 
@@ -412,12 +430,18 @@ class mytorch:
         -------
         torch.Tensor
             Softmaxed tensor.
+
+        Raises
+        ------
+        ValueError
+            If the softmax is inf or nan.
         """
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = x / temperature
         x = torch.softmax(x, dim=dim)
         if torch.isinf(x).any() or torch.isnan(x).any():
-            raise ValueError("softmax is inf or nan")
+            msg = "softmax is inf or nan"
+            raise ValueError(msg)
         return x
 
     @staticmethod
@@ -442,11 +466,17 @@ class mytorch:
         -------
         torch.Tensor
             Gumbel softmaxed tensor.
+
+        Raises
+        ------
+        ValueError
+            If the gumbel_softmax is inf or nan.
         """
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
         if torch.isinf(x).any() or torch.isnan(x).any():
-            raise ValueError("gumbel_softmax is inf or nan")
+            msg = "gumbel_softmax is inf or nan"
+            raise ValueError(msg)
         return x
 
 
@@ -522,4 +552,3 @@ if __name__ == "__main__":
     import doctest
 
     doctest.testmod()
-    # print

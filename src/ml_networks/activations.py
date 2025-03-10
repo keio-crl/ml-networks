@@ -28,29 +28,29 @@ class Activation(nn.Module):
 
 
 class REReLU(nn.Module):
+    """
+    Reparametarized ReLU activation function. This backward pass is differentiable.
+
+    References
+    ----------
+    https://openreview.net/forum?id=lNCnZwcH5Z
+
+    Parameters
+    ----------
+    reparametarize_fn : str
+        Reparametarization function. Default is GELU.
+
+    Examples
+    --------
+    >>> rerelu = REReLU()
+    >>> x = torch.randn(1, 3)
+    >>> output = rerelu(x)
+    >>> output.shape
+    torch.Size([1, 3])
+    """
+
     def __init__(self, reparametarize_fn: str = "gelu") -> None:
         super().__init__()
-        """
-        Reparametarized ReLU activation function. This backward pass is differentiable.
-
-        References
-        ----------
-        https://openreview.net/forum?id=lNCnZwcH5Z
-
-        Parameters:
-        ----------
-        reparametarize_fn : str
-            Reparametarization function. Default is GELU.
-
-        Examples:
-        ---------
-        >>> rerelu = REReLU()
-        >>> x = torch.randn(1, 3)
-        >>> output = rerelu(x)
-        >>> output.shape
-        torch.Size([1, 3])
-
-        """
         reparametarize_fn = reparametarize_fn.lower()
         self.reparametarize_fn = getattr(F, reparametarize_fn)
 

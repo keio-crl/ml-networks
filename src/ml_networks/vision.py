@@ -185,7 +185,6 @@ class Encoder(pl.LightningModule):
         x = self.encoder(x)
         x = x.view(-1, self.conved_size)
         x = self.fc(x)
-
         return x.reshape([*batch_shape, *x.shape[1:]])
 
 
@@ -440,7 +439,9 @@ class ViT(nn.Module):
         self.last_channel = self.out_patch_dim // (self.patch_size**2)
 
     def forward(
-        self, x: torch.Tensor, return_cls_token: bool = False,
+        self,
+        x: torch.Tensor,
+        return_cls_token: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass.
@@ -476,8 +477,17 @@ class ViT(nn.Module):
 
     def patchify(self, imgs: torch.Tensor) -> torch.Tensor:
         """
-        imgs: (N, C, H, W)
-        x: (N, L, patch_size**2 *3)
+        画像をパッチに分割する.
+
+        Paramters
+        ---------
+        imgs: torch.Tensor
+            入力画像. (N, C, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            パッチ化した画像. (N, L, patch_size**2 * D)
         """
         p = self.patch_size
         assert imgs.shape[-1] % p == 0 and imgs.shape[-2] % p == 0
@@ -485,8 +495,16 @@ class ViT(nn.Module):
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: (N, L, patch_size**2 * D)
-        imgs: (N, C, H, W)
+        パッチを画像に戻す.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            入力. (N, L, patch_size**2 * D)
+
+        Returns
+        -------
+            画像. (N, C, H, W)
         """
         p = self.patch_size
         h = self.obs_shape[1] // p
@@ -1117,7 +1135,7 @@ class ConvTranspose(nn.Module):
         return nn.Sequential(*convs)
 
     @staticmethod
-    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ConvNetConfig) -> tuple[int, int, int]:
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ConvNetConfig) -> tuple[int, ...]:
         """
         Get input shape of the decoder.
 
