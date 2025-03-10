@@ -89,7 +89,7 @@ class ConvNetConfig:
     """
     channels: Tuple[int, ...]
     conv_cfgs: Tuple[ConvConfig, ...]
-    init_channel: int
+    init_channel: int = 16
 
     def __post_init__(self):
         self.conv_cfgs = tuple(self.conv_cfgs)
