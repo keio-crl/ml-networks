@@ -19,6 +19,41 @@ def load_config(path: str) -> DictConfig:
 
 @dataclass
 class ConvConfig:
+    """
+    A convolutional layer configuration.
+
+    Attributes:
+    -----------
+    activation : str
+        Activation function.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride.
+    padding : int
+        Padding.
+    output_padding : int
+        Output padding, especially for transposed convolution. Default is 0.
+    dilation : int
+        Dilation.
+    groups : int
+        Number of groups. Default is 1. See https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html.
+    bias : bool
+        Whether to use bias. Default is True.
+    dropout : float
+        Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
+    norm : Literal["batch", "group", "none"]
+        Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
+    norm_cfg : dict
+        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization, 
+        set norm to "group" and set norm_cfg with "num_groups=$in_channel, 1, or any value". Default is {}.
+    scale_factor : int
+        Scale factor for upsample, especially for PixelShuffle or PixelUnshuffle. 
+        If it's set to >0, upsample is applied. If it's set to <0 downsample is applied. 
+        Otherwise, no upsample or downsample is applied. Default is 0.
+
+
+    """
     activation: str
     kernel_size: int
     stride: int
@@ -28,7 +63,7 @@ class ConvConfig:
     groups: int = 1
     bias: bool = True
     dropout: float = 0.0
-    norm: Literal["batch", "layer", "batch", "group", "none"] = "none"
+    norm: Literal["batch", "group", "none"] = "none"
     norm_cfg: dict = field(default_factory=dict)
     scale_factor: int = 0
 
@@ -40,6 +75,18 @@ class ConvConfig:
 
 @dataclass
 class ConvNetConfig:
+    """
+    Convolutional neural network layers configuration.
+    
+    Attributes:
+    -----------
+    channels : Tuple[int, ...]
+        Number of channels for each layer.
+    conv_cfgs : Tuple[ConvConfig, ...]
+        Convolutional layer configurations. The length of conv_cfgs should be the same as the length of channels.
+    init_channel : int
+        Initial number of channels, especially for transposed convolution. 
+    """
     channels: Tuple[int, ...]
     conv_cfgs: Tuple[ConvConfig, ...]
     init_channel: int
@@ -52,6 +99,37 @@ class ConvNetConfig:
 
 @dataclass
 class ResNetConfig:
+    """
+    Residual neural network layers configuration.
+    
+    Attributes:
+    -----------
+    conv_channel : int
+        Number of channels for convolutional layer. In ResNet, common number of channels is used for all layers.
+    conv_kernel : int
+        Kernel size for convolutional layer. In ResNet, common kernel size is used for all layers.
+    f_kernel : int
+        Kernel size for final or first convolutional layer. This depends on whether PixelShuffle or PixelUnshuffle is used.
+    conv_activation : str
+        Activation function for convolutional layer.
+    out_activation : str
+        Activation function for output layer.
+    n_res_blocks : int
+        Number of residual blocks.
+    scale_factor : int
+        Scale factor for upsample, especially for PixelShuffle or PixelUnshuffle.
+    n_scaling : int
+        Number of upsample or downsample layers. The image size is scaled by scalefactor^n_scaling.
+    norm : Literal["batch", "group", "none"]
+        Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
+    norm_cfg : dict
+        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization, 
+        set norm to "group" and set norm_cfg with "num_groups=$in_channel, 1, or any value". Default is {}.
+    dropout : float
+        Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
+    init_channel : int
+        Initial number of channels, especially for decoder.
+    """
     conv_channel: int
     conv_kernel: int
     f_kernel: int
@@ -67,6 +145,21 @@ class ResNetConfig:
 
 @dataclass
 class MLPConfig:
+    """
+    Multi-layer perceptron configuration.
+
+    Attributes:
+    -----------
+    hidden_dim : int
+        Number of hidden units.
+    n_layers : int  
+        Number of layers.
+    output_activation : str
+        Activation function for output layer.
+    linear_cfg : LinearConfig
+        Linear layer configuration.
+
+    """
     hidden_dim: int
     n_layers: int
     output_activation: str
@@ -74,6 +167,24 @@ class MLPConfig:
 
 @dataclass
 class LinearConfig:
+    """  
+    A linear layer configuration.
+
+    Attributes:
+    -----------
+    activation : str
+        Activation function.
+    norm : Literal["layer", "rms", "none"]
+        Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
+    norm_cfg : dict
+        Normalization layer configuration. Default is {}. 
+    dropout : float
+        Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
+    norm_first : bool
+        Whether to apply normalization before linear layer. Default is False.
+    bias : bool
+        Whether to use bias. Default is True.
+    """
     activation: str
     norm: Literal["layer", "rms", "none"] = "none"
     norm_cfg: dict = field(default_factory=dict)
@@ -83,6 +194,27 @@ class LinearConfig:
 
 @dataclass
 class TransformerConfig:
+    """
+    Transformer configuration.
+
+    Attributes:
+    -----------
+    d_model : int
+        Dimension of model.
+    nhead : int
+        Number of heads.
+    dim_ff : int
+        Dimension of feedforward network.
+    n_layers : int
+        Number of layers.
+    dropout : float
+        Dropout rate. Default is 0.1.
+    hidden_activation : Literal["ReLU", "GELU"]
+        Activation function for hidden layer. Default is "GELU".
+    output_activation : str
+        Activation function for output layer. Default is "GeLU".
+
+    """
     d_model: int
     nhead: int
     dim_ff: int
@@ -93,6 +225,20 @@ class TransformerConfig:
 
 @dataclass
 class ViTConfig:
+    """
+    Vision Transformer configuration.
+
+    Attributes:
+    -----------
+    patch_size : int
+        Patch size.
+    transformer_cfg : TransformerConfig
+        Transformer configuration.
+    cls_token : bool
+        Whether to use class token. Default is True.
+    init_channel : int
+        Initial number of channels. Default is 16.
+    """
     patch_size: int
     transformer_cfg: TransformerConfig
     cls_token: bool = True  
@@ -100,5 +246,15 @@ class ViTConfig:
 
 @dataclass
 class SpatialSoftmaxConfig:
-    temperature: float = 1.0
+    """
+    Spatial softmax configuration.
+
+    Attributes:
+    -----------
+    temperature : float
+        Softmax temperature. If it's set to 0.0, the layer outputs the coordinates of the maximum value. 
+        Otherwise, the layer outputs the expectation of the coordinates with softmax function.
+        Default is 0.0.
+    """
+    temperature: float = 0.0
 
