@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "oakwood-fujiken", email = "oakwood.n14.4sp@keio.jp" }
+    { name = "oakwood-fujiken", email = "oakwood.n14.4sp@keio.jp" },
+    { name = "nomutin", email = "nomura0508@icloud.com" }
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -27,5 +28,34 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "ipython>=8.33.0",
+    "mypy>=1.15.0",
     "pytest-cov>=6.0.0",
+    "ruff>=0.9.10",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+plugins = "numpy.typing.mypy_plugin"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+preview = true
+select = ["ALL"]
+ignore = []
+fixable = ["ALL"]
+unfixable = []
+exclude = [".git", ".ruff_cache", ".venv",]
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.pydoclint]
+style = 'numpy'
+exclude = '\.git|\.ruff_cache|\.mypy_cache|\.venv'
