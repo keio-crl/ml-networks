@@ -25,12 +25,17 @@ install時はアカウント名とパスワードが求められる場合があ�
 from ml_networks import MLPLayer, MLPConfig, LinearConfig
 
 mlp_config = MLPConfig(
-        hidden_dim= 128,
-        n_layers= 2,
-        output_activation="Tanh",
+        hidden_dim= 128, # 隠れ層の次元
+        n_layers= 2, # 隠れ層の数
+        output_activation="Tanh", # 出力層の活性化関数
         linaer_cfg=LinearConfig(
-            activation="ReLU",
-            bias=True,
+            activation="ReLU", # 活性化関数
+            bias=True, # バイアスを使うかどうか Default: True
+            norm="none", # 正規化を行うかどうか. Default: "none"
+                         # "none"で正規化なし．"layer"でLayerNorm, "rms"でRMSNormが使える．
+            norm_cfg={}, # 正規化の設定．それぞれの正規化層で変更できる設定はpytorch公式ドキュメントを参照．
+            norm_first=False, # 正規化をnn.Linearの前に行うかどうか．Default: False
+            dropout=0.0, # ドロップアウト率．0より大きくするとその割合だけドロップアウトする．Default: 0.0
         )
 )
 input_dim = 16
