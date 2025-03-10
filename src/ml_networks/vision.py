@@ -16,15 +16,92 @@ from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_tran
 from einops import rearrange
 
 class Encoder(pl.LightningModule):
-    """ Encoder + reparameterization
+    """ 
+    Encoder with various architectures
 
-    ただのEncoderよりモデルを軽く
-    self.sequenceでは
-        (C, W, H) -> (batch_size, W/2 * H/2 * 256)
-        -> (batch_size, middle_layer_dim)
-    self.fc_for_mu/ligvarで
-        (batch_size, middle_layer_dim) -> (batch_size, latent_dim)
-    になる
+    Parameters
+    ----------
+    feature_dim: Union[int, tuple[int, int, int]]
+        dimension of the feature tensor, if int, Encoder includes full connection layer to downsample the feature tensor.
+        Otherwise, Encoder does not include full connection layer and directly process with backbone network.
+    obs_shape: tuple[int, int, int]
+        shape of the input tensor
+    backbone_cfg: Union[ViTConfig, ConvNetConfig, ResNetConfig]
+        configuration of the network
+    fc_cfg: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
+        configuration of the full connection layer. If feature_dim is tuple, fc_cfg is ignored.
+        If feature_dim is int, fc_cfg must be provided. Default is None.
+
+
+    Examples
+    --------
+    >>> feature_dim = 128
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ConvNetConfig(
+    ...     channels=[16, 32, 64],
+    ...     conv_cfgs=[
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...     ]
+    ... )
+    >>> fc_cfg = LinearConfig(
+    ...     activation="ReLU",
+    ...     bias=True
+    ... )
+    >>> encoder = Encoder(feature_dim, obs_shape, cfg, fc_cfg)
+    >>> x = torch.randn(2, *obs_shape)
+    >>> y = encoder(x)
+    >>> y.shape
+    torch.Size([2, 128])
+
+    >>> encoder
+    Encoder(
+      (encoder): ConvNet(
+        (conv): Sequential(
+          (0): ConvNormActivation(
+            (conv): Conv2d(3, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (pixel_shuffle): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (1): ConvNormActivation(
+            (conv): Conv2d(16, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (pixel_shuffle): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (2): ConvNormActivation(
+            (conv): Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (pixel_shuffle): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+        )
+      )
+      (fc): Sequential(
+        (0): Flatten(start_dim=1, end_dim=-1)
+        (1): LinearNormActivation(
+          (linear): Linear(in_features=4096, out_features=128, bias=True)
+          (norm): Identity()
+          (activation): Activation(
+            (activation): ReLU()
+          )
+          (dropout): Identity()
+        )
+      )
+    )
+
+
 
     """
 
@@ -78,6 +155,19 @@ class Encoder(pl.LightningModule):
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *obs_shape)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, *feature_dim)
+        """
         batch_shape = x.shape[:-3]
 
         x = x.reshape([-1, *self.obs_shape])
@@ -90,6 +180,111 @@ class Encoder(pl.LightningModule):
 
 
 class Decoder(pl.LightningModule):
+    """
+    Decoder with various architectures
+
+    Parameters
+    ----------
+    feature_dim: Union[int, tuple[int, int, int]]
+        dimension of the feature tensor, if int, Decoder includes full connection layer to upsample the feature tensor.
+        Otherwise, Decoder does not include full connection layer and directly process with backbone network.
+    obs_shape: tuple[int, int, int]
+        shape of the output tensor
+    backbone_cfg: Union[ConvNetConfig, ViTConfig, ResNetConfig]
+        configuration of the network
+    fc_cfg: Union[MLPConfig, LinearConfig]
+        configuration of the full connection layer. If feature_dim is tuple, fc_cfg is ignored. 
+        If feature_dim is int, fc_cfg must be provided. Default is None.
+
+    Examples
+    --------
+    >>> feature_dim = 128
+    >>> obs_shape = (3, 64, 64)
+    >>> cfg = ConvNetConfig(
+    ...     channels=[64, 32, 16],
+    ...     conv_cfgs=[
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...         ConvConfig(kernel_size=4, stride=2, padding=1, activation="ReLU", norm="batch", dropout=0.0),
+    ...     ]
+    ... )
+    >>> fc_cfg = MLPConfig(
+    ...     hidden_dim=256,
+    ...     n_layers=2,
+    ...     output_activation= "ReLU",
+    ...     linear_cfg= LinearConfig(
+    ...         activation= "ReLU",
+    ...         bias= True
+    ...     )
+    ... )
+
+    >>> decoder = Decoder(feature_dim, obs_shape, cfg, fc_cfg)
+    >>> x = torch.randn(2, feature_dim)
+    >>> y = decoder(x)
+    >>> y.shape
+    torch.Size([2, 3, 64, 64])
+
+    >>> decoder
+    Decoder(
+      (fc): MLPLayer(
+        (dense): Sequential(
+          (0): LinearNormActivation(
+            (linear): Linear(in_features=128, out_features=256, bias=True)
+            (norm): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (1): LinearNormActivation(
+            (linear): Linear(in_features=256, out_features=256, bias=True)
+            (norm): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (2): LinearNormActivation(
+            (linear): Linear(in_features=256, out_features=1024, bias=True)
+            (norm): Identity()
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+        )
+      )
+      (decoder): ConvTranspose(
+        (first_conv): Conv2d(16, 64, kernel_size=(1, 1), stride=(1, 1))
+        (conv): Sequential(
+          (0): ConvTransposeNormActivation(
+            (conv): ConvTranspose2d(64, 32, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (1): ConvTransposeNormActivation(
+            (conv): ConvTranspose2d(32, 16, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+          (2): ConvTransposeNormActivation(
+            (conv): ConvTranspose2d(16, 3, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+            (norm): BatchNorm2d(3, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activation): Activation(
+              (activation): ReLU()
+            )
+            (dropout): Identity()
+          )
+        )
+      )
+    )
+    """
     def __init__(
         self,
         feature_dim: Union[int, tuple[int, int, int]],
@@ -131,6 +326,20 @@ class Decoder(pl.LightningModule):
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *feature_dim)
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, *obs_shape)
+
+        """
         if self.has_fc:
             batch_shape, data_shape = x.shape[:-1], x.shape[-1:]
         else:
@@ -214,6 +423,24 @@ class ViT(nn.Module):
         self.last_channel = self.out_patch_dim // (self.patch_size ** 2)
 
     def forward(self, x: torch.Tensor, return_cls_token: bool = False):
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input tensor of shape (batch_size, *in_shape)
+        return_cls_token: bool
+            whether to return cls_token. Default is False.
+
+        Returns
+        -------
+        torch.Tensor
+            output tensor of shape (batch_size, *obs_shape)
+        torch.Tensor
+            cls_token of shape (batch_size, self.out_patch_dim) if return_cls_token
+
+        """
         if self.is_encoder:
             x = self.patch_embed(x)
         else:
