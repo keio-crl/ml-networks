@@ -5,10 +5,17 @@
 
 ## Installation
 以下のようなコマンドでインストールが可能です．  
+（※3角打ちどれか一つでOK）
 
 ```bash
 pip install https://github.com/keio-crl/ml-networks.git
+```
+
+```bash
 rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
+```
+
+```bash
 uv add "ml-networks @ git+https://github.com/keio-crl/ml-networks.git"
 ```
 
