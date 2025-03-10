@@ -399,6 +399,23 @@ class mytorch:
     def gumbel_softmax(
         inputs: torch.Tensor, dim: int, temperature: float = 1.0
     ):
+        """
+        Gumbel softmax function with temperature. This prevents overflow and underflow.
+
+        Args:
+        -----
+        inputs : torch.Tensor
+            Input tensor.
+        dim : int
+            Dimension to apply softmax.
+        temperature : float
+            Temperature. Default is 1.0.
+
+        Returns:
+        --------
+        torch.Tensor
+            Gumbel softmaxed tensor.
+        """
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
         if torch.isinf(x).any() or torch.isnan(x).any():
