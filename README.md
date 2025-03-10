@@ -21,6 +21,7 @@ install時はアカウント名とパスワードが求められる場合があ�
 詳細な説明は[こちら](https://github.com/keio-crl/ml-networks.git)(in coming).
 
 ### MLP
+
 ```python
 from ml_networks import MLPLayer, MLPConfig, LinearConfig
 
@@ -64,13 +65,14 @@ from ml_networks import (Encoder, ConvNetConfig,
 
 ```
 #### backboneの設定
-画像の処理を行うアーキテクチャを変えたい場合は引数に渡すConfigを変える
+画像のDownsampling処理を行うアーキテクチャを変えたい場合は引数に渡すConfigを変える
 
 ```python
  
-# 多層CNN+MLPのエンコーダ
-encoder_config = ConvNetConfig(
-    channels=[16, 32, 64],
+# 多層CNNのエンコーダ
+encoder_cfg = ConvNetConfig(
+    channels=[16, 32, 64], # 各層のchannel数．最初から順に入力（画像）に近い層のchannel数を指定．
+                           # ここの数はconv_cfgsの数と一致している必要がある． 
     conv_cfgs=[
         ConvConfig(
             kernel_size=3, # カーネルサイズ
@@ -91,13 +93,13 @@ encoder_config = ConvNetConfig(
                            # 0より大きいとPixelShuffle, 0より小さいとPixelUnShuffleが設定のスケールで行われる．
                            # Default: 0
         ),
-        ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"),
+        ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"), # 最低限の設定の場合はこれ
         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"),
     ]
 )
 
 # ResNet+PixelUnShuffleのエンコーダ
-encoder_config = ResNetConfig(
+encoder_cfg = ResNetConfig(
     conv_channel=64, # channel数. 全ての層で同じchannel
     conv_kernel=3, # カーネルサイズ
     f_kernel=3, # 最初 or 最後の層のカーネルサイズ
@@ -111,6 +113,8 @@ encoder_config = ResNetConfig(
     dropout=0.0, # ドロップアウト率. ConvConfigと同じ．
 )
 
+# !! ViTConfigにすればVisionTransformerが使える．
+# !! しかし，実装が若干不安なので非推奨．
 ```
 #### 全結合層の設定
 特徴次元に変換する全結合層の設定を行う．
@@ -144,8 +148,11 @@ full_connection_cfg = None
 
 obs_shape = (3, 64, 64)
 feature_dim = 64
+# 特徴マップをそのまま出力する場合
+## feature_dim = <backboneの出力特徴マップ次元>
+## 違うのを渡すとエラーで正しいものを教えてくれる
 
-encoder = Encoder(feature_dim, obs_shape, encoder_config, full_connection_cfg)
+encoder = Encoder(feature_dim, obs_shape, encoder_cfg, full_connection_cfg)
 
 obs = torch.randn(32, 3, 64, 64)
 z = encoder(obs)
@@ -156,7 +163,75 @@ print(z.shape)
 ```
 
 ### Decoder
+#### Import
 ```python
-from ml_networks import Decoder, ConvNetConfig, MLPConfig, LinearConfig
+from ml_networks import Decoder, ConvNetConfig, MLPConfig, LinearConfig, ResNetConfig
+
+```
+#### backboneの設定
+Upsamplingを行うアーキテクチャを変えたい場合は引数に渡すConfigを変える
+
+```python
+
+# 多層ConvTransposeのデコーダ
+# エンコーダにはないoutput_paddingの設定が可能.
+# 参考: https://note.com/kiyo_ai_note/n/ne4d78a36de04
+decoder_cfg = ConvNetConfig(
+    channels=[64, 32, 16], # 各層のchannel数．最初から順に入力（特徴量）に近い層のchannel数を指定．
+                           # ここの数はconv_cfgsの数と一致している必要がある． 
+    conv_cfgs=[
+        ConvConfig(
+            output_padding=0, # 出力パディング. ConvTranspose2dのみに利用される．Default: 0
+                              # 他はエンコーダの場合と同じ.
+            kernel_size=3, # カーネルサイズ
+            stride=2, # ストライド
+            padding=1, # パディング
+        ),
+        ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"), # 最低限の設定の場合はこれ
+        ConvConfig(kernel_size=3, stride=2, padding=1, activation="Tanh"), # 最後の層は出力層なので活性化関数を変える
+    ]
+
+)
+
+# ResNet+PixelShuffleのデコーダ
+# エンコーダのPixelUnShuffle -> PixelShuffleとなったバージョン．
+# PixelShuffleはPixelUnShuffleの逆なので，縦横がデカくなる．
+encoder_config = ResNetConfig(
+    conv_channel=64, # channel数. 全ての層で同じchannel
+    conv_kernel=3, # カーネルサイズ
+    f_kernel=3, # 最初 or 最後の層のカーネルサイズ
+    conv_activation="ReLU", # 活性化関数
+    output_activation="Tanh", # 出力層の活性化関数
+    n_res_blocks=3, # ResBlockの数
+    scale_factor=2, # PixelShuffleのスケールファクタ. 1回のPixelUhuffleで何倍にするか
+    n_scaling=3, # PixelUnShuffleの数
+    norm="batch", # 正規化の種類. ConvConfigと同じ．
+    norm_cfg={"affine": True}, # 正規化の設定. ConvConfigと同じ．
+    dropout=0.0, # ドロップアウト率. ConvConfigと同じ．
+)
+
+```
+
+#### 全結合層の設定
+エンコーダと同様．エンコーダにおける説明の「出力」を「入力」に読み変えればそのまま
+
+#### 使用例
+
+```python
+
+obs_shape = (3, 64, 64)
+feature_dim = 64
+# 特徴マップをそのまま入力する場合
+## feature_dim = <backboneの入力特徴マップ次元>
+## 違うのを渡すとエラーが出る．
+
+encoder = Encoder(feature_dim, obs_shape, decoder_cfg, full_connection_cfg)
+
+z = torch.randn(32, feature_dim)
+predicted_obs = decoder(z)
+print(predicted_obs.shape)
+>>> torch.Size([32, 3, 64, 64])
+
+```
 
 
