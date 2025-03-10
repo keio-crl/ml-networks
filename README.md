@@ -5,7 +5,7 @@
 
 ## Installation
 以下のようなコマンドでインストールが可能です．  
-（※3角打ちどれか一つでOK）
+（※3つの内どれか一つでOK）
 
 ```bash
 pip install https://github.com/keio-crl/ml-networks.git
