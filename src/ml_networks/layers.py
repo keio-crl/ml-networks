@@ -70,6 +70,13 @@ def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs):
 class LinearNormActivation(nn.Module):
     """
     Linear layer with normalization and activation, and dropouts.
+    
+    References:
+    -----------
+    LayerNorm: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+    RMSNorm: https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html
+    Linear: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
 
     Parameters:
     -----------
@@ -308,6 +315,17 @@ class MLPLayer(pl.LightningModule):
 class ConvNormActivation(nn.Module):
     """
     Convolutional layer with normalization and activation, and dropouts.
+
+    References:
+    -----------
+    PixelShuffle: https://pytorch.org/docs/stable/generated/torch.nn.PixelShuffle.html
+    PixelUnshuffle: https://pytorch.org/docs/stable/generated/torch.nn.PixelUnshuffle.html
+    BatchNorm2d: https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+    GroupNorm: https://pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html
+    LayerNorm: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+    InstanceNorm2d: https://pytorch.org/docs/stable/generated/torch.nn.InstanceNorm2d.html
+    Conv2d: https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+    Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
 
     Parameters:
     -----------
