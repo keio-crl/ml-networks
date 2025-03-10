@@ -66,7 +66,7 @@ print(y.shape)
 ### Encoder
 そんなに強いエンコーダがいらない時は，以下のように使うことができます．
 強いエンコーダが必要な場合は，[timm](https://github.com/huggingface/pytorch-image-models)でも使ってください．
-（参考:https://zenn.dev/piment/articles/4ff3b6dfd73103）
+参考:https://zenn.dev/piment/articles/4ff3b6dfd73103
 
 #### Import
 ```python
