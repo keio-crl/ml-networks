@@ -5,45 +5,349 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import pytorch_optimizer
 import schedulefree
 from torch.utils.data import DataLoader, Dataset
 
 
 def conv_out(h_in, padding, kernel_size, stride, dilation=1):
+    """
+    Calculate the output size of convolutional layer.
+
+    Args:
+    -----
+    h_in : int
+        Input size.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+
+    Returns:
+    --------
+    int
+        Output size.
+
+    Examples:
+    ---------
+    >>> conv_out(32, 1, 3, 1)
+    32
+    >>> conv_out(32, 1, 3, 2)
+    16
+    >>> conv_out(32, 1, 3, 1, 2)
+    30
+    """
     return int((h_in + 2.0 * padding - dilation*(kernel_size - 1.0) - 1.0) / stride + 1.0)
 
 def conv_transpose_out(h_in, padding, kernel_size, stride, dilation=1, output_padding=0):
+    """
+    Calculate the output size of transposed convolutional layer.
+
+    Args:
+    -----
+    h_in : int
+        Input size.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+    output_padding : int
+        Output padding size. Default is 0.
+
+    Returns:
+    --------
+    int
+        Output size.
+
+    Examples:
+    ---------
+    >>> conv_transpose_out(32, 1, 3, 1)
+    32
+    >>> conv_transpose_out(32, 1, 3, 2)
+    63
+    >>> conv_transpose_out(32, 1, 3, 1, 2)
+    34
+    >>> conv_transpose_out(32, 1, 3, 1, 1, 1)
+    33
+
+
+    """
     return (h_in - 1) * stride - 2 * padding + dilation*(kernel_size - 1) + output_padding + 1
 
 def conv_transpose_in(h_out, padding, kernel_size, stride, dilation=1, output_padding=0):
-    return (h_out - output_padding - 1 + 2 * padding - dilation*(kernel_size - 1)) / stride + 1
+    """
+    Calculate the input size of transposed convolutional layer.
 
-def output_padding(h_in, conv_out, padding, kernel_size, stride, dilation=1):
-    return h_in - (conv_out - 1) * stride + 2 * padding - dilation*(kernel_size - 1) - 1
+    Args:
+    -----
+    h_out : int
+        Output size.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+    output_padding : int
+        Output padding size. Default is 0.
+
+    Returns:
+    --------
+    int
+        Input size.
+
+    Examples:
+    ---------
+    >>> conv_transpose_in(32, 1, 3, 1)
+    32
+    >>> conv_transpose_in(32, 1, 3, 2)
+    16
+    >>> conv_transpose_in(32, 1, 3, 1, 2)
+    30
+    >>> conv_transpose_in(32, 1, 3, 1, 1, 1)
+    31
+
+    """
+    return int((h_out - output_padding - 1 + 2 * padding - dilation*(kernel_size - 1)) / stride + 1)
+
+def output_padding(h_in, h_out, padding, kernel_size, stride, dilation=1):
+    """
+    Calculate the output padding size of transposed convolutional layer.
+
+    Args:
+    -----
+    h_in : int
+        Input size.
+    h_out : int
+        Output size.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+
+    Returns:
+    --------
+    int
+        Output padding size.
+
+    Examples:
+    ---------
+    >>> output_padding(32, 32, 1, 3, 1)
+    0
+    >>> output_padding(32, 16, 1, 3, 2)
+    1
+    >>> output_padding(32, 30, 1, 3, 1, 2)
+    0
+
+    """
+    return h_in - (h_out - 1) * stride + 2 * padding - dilation*(kernel_size - 1) - 1
 
 
-def conv_out_shape(h_in, padding, kernel_size, stride, dilation=1):
-    return tuple(conv_out(x, padding, kernel_size, stride, dilation) for x in h_in)
+def conv_out_shape(shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int=1):
+    """
+    Calculate the output size of convolutional layer.
 
-def conv_transpose_out_shape(h_in, padding, kernel_size, stride, dilation=1, output_padding=0):
-    return tuple(conv_transpose_out(h_in[i], padding, kernel_size, stride, dilation, output_padding)
-                 for i in range(len(h_in)))
+    Args:
+    -----
+    shape : tuple[int, ...]
+        Input shape.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
 
-def conv_transpose_in_shape(h_out, padding, kernel_size, stride, dilation=1, output_padding=0):
-    return tuple(conv_transpose_in(h_out[i], padding, kernel_size, stride, dilation, output_padding)
-                 for i in range(len(h_out)))
+    Returns:
+    --------
+    tuple[int, ...]
+        Output shape. 
 
-def output_padding_shape(h_in, conv_out, padding, kernel_size, stride, dilation=1):
+    Examples:
+    ---------
+    >>> conv_out_shape((32, 32), 1, 3, 1)
+    (32, 32)
+    >>> conv_out_shape((32, 32), 1, 3, 2)
+    (16, 16)
+
+
+    """
+    return tuple(conv_out(x, padding, kernel_size, stride, dilation) for x in shape)
+
+def conv_transpose_out_shape(in_shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int=1, output_padding: int=0):
+    """
+    Calculate the output size of transposed convolutional layer.
+
+    Args:
+    -----
+    in_shape : tuple[int, ...]
+        Input shape.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+    output_padding : int
+        Output padding size. Default is 0.
+
+    Returns:
+    --------
+    tuple[int, ...]
+
+    Examples:
+    ---------
+    >>> conv_transpose_out_shape((32, 32), 1, 3, 1)
+    (32, 32)
+
+    >>> conv_transpose_out_shape((32, 32), 1, 3, 2)
+    (63, 63)
+
+    >>> conv_transpose_out_shape((32, 32), 1, 3, 1, 2)
+    (34, 34)
+
+    >>> conv_transpose_out_shape((32, 32), 1, 3, 1, 1, 1)
+    (33, 33)
+    """
+    return tuple(conv_transpose_out(in_shape[i], padding, kernel_size, stride, dilation, output_padding)
+                 for i in range(len(in_shape)))
+
+def conv_transpose_in_shape(out_shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int=1, output_padding: int=0):
+    """
+    Calculate the input size of transposed convolutional layer.
+
+    Args:
+    -----
+    out_shape : tuple[int, ...]
+        Output shape.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+    output_padding : int
+        Output padding size. Default is 0.
+
+    Returns:
+    --------
+    tuple[int, ...]
+
+    Examples:
+    ---------
+    >>> conv_transpose_in_shape((32, 32), 1, 3, 1)
+    (32, 32)
+
+    >>> conv_transpose_in_shape((32, 32), 1, 3, 2)
+    (16, 16)
+
+    >>> conv_transpose_in_shape((32, 32), 1, 3, 1, 2)
+    (30, 30)
+
+
+    >>> conv_transpose_in_shape((32, 32), 1, 3, 1, 1, 1)
+    (31, 31)
+    """
+    return tuple(conv_transpose_in(out_shape[i], padding, kernel_size, stride, dilation, output_padding)
+                 for i in range(len(out_shape)))
+
+def output_padding_shape(in_shape: tuple[int, ...], out_shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int=1):
+    """
+    Calculate the output padding size of transposed convolutional layer.
+
+    Args:
+    -----
+    in_shape : tuple[int, ...]
+        Input shape.
+    out_shape : tuple[int, ...]
+        Output shape.
+    padding : int
+        Padding size.
+    kernel_size : int
+        Kernel size.
+    stride : int
+        Stride size.
+    dilation : int
+        Dilation size. Default is 1.
+
+    Returns:
+    --------
+    tuple[int, ...]
+
+    Examples:
+    ---------
+    >>> output_padding_shape((32, 32), (32, 32), 1, 3, 1)
+    (0, 0)
+
+    >>> output_padding_shape((32, 32), (16, 16), 1, 3, 2)
+    (1, 1)
+
+    >>> output_padding_shape((32, 32), (30, 30), 1, 3, 1, 2)
+    (0, 0)
+    """
     return tuple(
-        output_padding(h_in[i], conv_out[i], padding, kernel_size, stride, dilation)
-        for i in range(len(h_in))
+        output_padding(in_shape[i], out_shape[i], padding, kernel_size, stride, dilation)
+        for i in range(len(in_shape))
     )
 
 
 def get_optimizer(
     param: Iterator[nn.Parameter], name: str, **kwargs
 ):
+    """
+    Get optimizer from torch.optim or pytorch_optimizer.
+
+    Args:
+    -----
+    param : Iterator[nn.Parameter]
+        Parameters of models to optimize.
+    name : str
+        Optimizer name.
+    kwargs : dict
+        Optimizer arguments(settings).
+
+    Returns:
+    --------
+    torch.optim.Optimizer
+
+    Examples:
+    ---------
+    >>> get_optimizer([nn.Parameter(torch.randn(1, 3))], "Adam", lr=0.01)
+    Adam (
+    Parameter Group 0
+        amsgrad: False
+        betas: (0.9, 0.999)
+        capturable: False
+        differentiable: False
+        eps: 1e-08
+        foreach: None
+        fused: None
+        lr: 0.01
+        maximize: False
+        weight_decay: 0
+    )
+    """
     if hasattr(schedulefree, name):
         optimizer = getattr(schedulefree, name)
     elif hasattr(torch.optim, name):
@@ -57,22 +361,27 @@ def get_optimizer(
 
 class mytorch:
     @staticmethod
-    def concat(tensor_list: list, dim=0):
-        if None in tensor_list:
-            return None
-        return torch.cat(tensor_list, dim=dim)
-
-    @staticmethod
-    def stack(tensor_list: list, dim=0):
-        if None in tensor_list:
-            return None
-        return torch.stack(tensor_list, dim=dim)
-
-    @staticmethod
     @torch.jit.script
     def softmax(
-        inputs: torch.Tensor, dim: int, temperature: torch.Tensor = torch.tensor(1.0)
+        inputs: torch.Tensor, dim: int, temperature: float = 1.0
     ):
+        """
+        Softmax function with temperature. This prevents overflow and underflow.
+            
+        Args:
+        -----
+        inputs : torch.Tensor
+            Input tensor.
+        dim : int
+            Dimension to apply softmax.
+        temperature : float
+            Temperature. Default is 1.0.
+
+        Returns:
+        --------
+        torch.Tensor
+            Softmaxed tensor.
+        """
 
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = x / temperature
@@ -86,94 +395,55 @@ class mytorch:
 
         return x
 
-
-# 明るさを変更する関数
-def change_brightness(img: torch.Tensor, std: float = 0.1, max: float = 1.0, min: float = -1.0, clamp: bool = True):
-    """
-
-    画像(tensor)明るさを変更する関数
-    M1のコードそのまま
-
-    Args:
-        img(np.ndarray): 元画像
-        alpha(float): コントラスト
-        beta(float): 明るさ
-
-    Returns:
-        torch.Tensor: 明るさを変えた画像
-
-    """
-    alpha = torch.normal(1.0, std, size=(1,))
-
-    beta = torch.normal(0.0, std, size=(1,))
-
-    bright_img = alpha * img + beta
-
-    if clamp:
-        bright_img = torch.clamp(bright_img, min, max)
-
-    return bright_img
-
-
-@torch.jit.script
-def add_noise(
-    input_data: torch.Tensor,
-    mean: float = 0.0,
-    std: float = 0.1,
-    max: float = 0.95,
-    min: float = -0.95,
-    clamp: bool = True,
-):
-    """関節角度にノイズを加える
-
-    Args:
-        angles(np.ndarray): 元関節データ
-        alpha(float): ノイズ
-        beta(float): バイアス
-
-    Returns:
-        torch.Tensor: ノイズを加えた関節データ
-
-    """
-
-    noise = torch.normal(mean, std, size=input_data.shape)
-
-    data = input_data + noise
-    if clamp:
-
-        clip_data = torch.clamp(data, min, max)
-
-    else:
-        clip_data = data
-    return clip_data
-
+    @staticmethod
+    def gumbel_softmax(
+        inputs: torch.Tensor, dim: int, temperature: float = 1.0
+    ):
+        x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
+        x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
+        if torch.isinf(x).any() or torch.isnan(x).any():
+            print("inputs", inputs)
+            print("result", x)
+            raise ValueError("gumbel_softmax is inf or nan")
+        return x
 
 def determine_loader(
     data: Dataset, seed: int, batch_size: int, shuffle: bool = True, collate_fn=None
 ):
+    """
+    Determine DataLoader with fixed seed.
+
+    Args:
+    -----
+    data : Dataset
+        Dataset to load.
+    seed : int
+        Random seed.
+    batch_size : int
+        Batch size.
+    shuffle : bool
+        Whether to shuffle data. Default is True.
+    collate_fn : callable
+        Collate function. Default is None.
+    
+    Returns:
+    --------
+    DataLoader
+        DataLoader with fixed seed.
+    """
+
     g = torch.Generator()
     g.manual_seed(seed)
-    if collate_fn is not None:
-        loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            worker_init_fn=seed_worker,
-            generator=g,
-            num_workers=2,
-            pin_memory=False,
-            collate_fn=collate_fn,
-        )
-    else:
-        loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            worker_init_fn=seed_worker,
-            generator=g,
-            num_workers=2,
-            pin_memory=False,
-        )
+    loader = DataLoader(
+        data,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        worker_init_fn=seed_worker,
+        generator=g,
+        num_workers=2,
+        pin_memory=False,
+        collate_fn=collate_fn,
+    )
     return loader
 
 
@@ -203,7 +473,10 @@ def seed_worker(worker_id):
 
     """
     worker_seed = torch.initial_seed() % 2**32
-    np.random.seed(worker_seed)
-    random.seed(worker_seed)
+    pl.seed_everything(worker_seed)
 
 
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+    # print
