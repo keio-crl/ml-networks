@@ -4,12 +4,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from mnetworks.layers import (PatchEmbed, TransformerLayer, 
+from ml_networks.layers import (PatchEmbed, TransformerLayer, 
         ConvTransposeNormActivation, ResidualBlock, 
         ConvNormActivation, PositionalEncoding,
         MLPLayer, LinearNormActivation, SpatialSoftmaxFlatten)
-from mnetworks.config import ConvNetConfig, ViTConfig, ResNetConfig, MLPConfig, LinearConfig, SpatialSoftmaxConfig, ConvConfig
-from mnetworks.utils import conv_out_shape, conv_transpose_in_shape
+from ml_networks.config import ConvNetConfig, ViTConfig, ResNetConfig, MLPConfig, LinearConfig, SpatialSoftmaxConfig, ConvConfig
+from ml_networks.utils import conv_out_shape, conv_transpose_in_shape
 from einops import rearrange
 
 
