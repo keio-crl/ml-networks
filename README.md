@@ -245,5 +245,62 @@ print(predicted_obs.shape)
 >>> torch.Size([32, 3, 64, 64])
 
 ```
+### その他便利なものたち
+#### activations
+stringで活性化関数を指定．
+pytorchに実装されている活性化関数に加えて，以下の活性化関数が使えます．
+- "REReLU" 
+    - "Reparametrized ReLU": 逆伝播がGELU等になるReLU. See [here](https://openreview.net/forum?id=lNCnZwcH5Z)
+- "SiGLU"
+    - "SiLU + GLU": SiLU(Swish)とGLUを組み合わせた活性化関数. See [here](https://arxiv.org/abs/2102.11972v2)
+- "CRReLU"
+    - "Correction Regularized ReLU": 正則化されたReLU. See [here](https://openreview.net/forum?id=7TZYM6Hm9p)
+- "TanhExp"
+    - Mishの改善版という位置付け. See [here](https://qiita.com/kuroitu/items/73cd401afd463a78115a)
+```python
+
+from ml_networks import Activation
+
+act = Activation("ReLU")
+```
+
+#### optimizers
+stringで最適化手法を指定．
+pytorchに実装されている最適化手法に加えて，  
+[pytorch_optimizer](https://pypi.org/project/pytorch_optimizer/)に実装されている最適化手法が使えます．
+最新のものが多いので便利．
+```python
+from ml_networks import get_optimizer
+import torch.nn as nn
+
+model = nn.Linear(16, 8)
+
+# **kwargsでoptimizerへの様々な設定に関する引数を渡すことができる．
+optimizer = get_optimizer(model.parameters(), "Adam", lr=1e-3, weight_decay=1e-4)
+
+```
+
+#### seed固定
+seedを固定する．
+```python
+from ml_networks import torch_fix_seed, determine_loader
+
+# random, np, torchのseedを固定する．
+# さらにGPU関連の再現性も（ある程度）担保．
+torch_fix_seed(42)
 
 
+from torch.utils.data import Dataset
+
+dataset = Dataset(any_data)
+
+# DataLoaderの再現性を担保する．
+# 通常のdataloaderの呼び出しでは，データの読み出しに関する再現性は担保されない．
+loader = determine_loader(
+    dataset, 
+    seed=42, # 乱数のseed
+    batch_size=32, # バッチサイズ
+    shuffle=True, # 毎エポックデータセットの中身を入れ替えるか. Validationの時はFalseにする．
+    collate_fn=None, # 特定のミニバッチ作成処理がある場合は指定する．
+)
+```
