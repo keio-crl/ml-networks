@@ -398,8 +398,10 @@ class ConvNormActivation(nn.Module):
         _out_channels = out_channels
         if "glu" in activation.lower():
             _out_channels = _out_channels*2
-        if scale_factor != 0:
+        if scale_factor > 0:
             _out_channels = _out_channels * (abs(scale_factor)**2)
+        elif scale_factor < 0:
+            _out_channels = _out_channels // (abs(scale_factor)**2)
         self.conv = nn.Conv2d(
             in_channels, 
             _out_channels,
