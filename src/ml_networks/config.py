@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import  Literal, Tuple, Any
+from typing import Any, Literal
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -21,8 +21,8 @@ class ConvConfig:
     """
     A convolutional layer configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     activation : str
         Activation function.
     kernel_size : int
@@ -44,15 +44,16 @@ class ConvConfig:
     norm : Literal["batch", "group", "none"]
         Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
     norm_cfg : dict
-        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization, 
+        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization,
         set norm to "group" and set norm_cfg with "num_groups=$in_channel, 1, or any value". Default is {}.
     scale_factor : int
-        Scale factor for upsample, especially for PixelShuffle or PixelUnshuffle. 
-        If it's set to >0, upsample is applied. If it's set to <0 downsample is applied. 
+        Scale factor for upsample, especially for PixelShuffle or PixelUnshuffle.
+        If it's set to >0, upsample is applied. If it's set to <0 downsample is applied.
         Otherwise, no upsample or downsample is applied. Default is 0.
 
 
     """
+
     activation: str
     kernel_size: int
     stride: int
@@ -72,22 +73,24 @@ class ConvConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
+
 @dataclass
 class ConvNetConfig:
     """
     Convolutional neural network layers configuration.
-    
-    Attributes:
-    -----------
+
+    Attributes
+    ----------
     channels : Tuple[int, ...]
         Number of channels for each layer.
     conv_cfgs : Tuple[ConvConfig, ...]
         Convolutional layer configurations. The length of conv_cfgs should be the same as the length of channels.
     init_channel : int
-        Initial number of channels, especially for transposed convolution. 
+        Initial number of channels, especially for transposed convolution.
     """
-    channels: Tuple[int, ...]
-    conv_cfgs: Tuple[ConvConfig, ...]
+
+    channels: tuple[int, ...]
+    conv_cfgs: tuple[ConvConfig, ...]
     init_channel: int = 16
 
     def __post_init__(self):
@@ -95,14 +98,13 @@ class ConvNetConfig:
         self.channels = tuple(self.channels)
 
 
-
 @dataclass
 class ResNetConfig:
     """
     Residual neural network layers configuration.
-    
-    Attributes:
-    -----------
+
+    Attributes
+    ----------
     conv_channel : int
         Number of channels for convolutional layer. In ResNet, common number of channels is used for all layers.
     conv_kernel : int
@@ -122,13 +124,14 @@ class ResNetConfig:
     norm : Literal["batch", "group", "none"]
         Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
     norm_cfg : dict
-        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization, 
+        Normalization layer configuration. If you want to use Instance, Layer, or Group normalization,
         set norm to "group" and set norm_cfg with "num_groups=$in_channel, 1, or any value". Default is {}.
     dropout : float
         Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
     init_channel : int
         Initial number of channels, especially for decoder.
     """
+
     conv_channel: int
     conv_kernel: int
     f_kernel: int
@@ -142,16 +145,17 @@ class ResNetConfig:
     dropout: float = 0.0
     init_channel: int = 16
 
+
 @dataclass
 class MLPConfig:
     """
     Multi-layer perceptron configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     hidden_dim : int
         Number of hidden units.
-    n_layers : int  
+    n_layers : int
         Number of layers.
     output_activation : str
         Activation function for output layer.
@@ -159,24 +163,26 @@ class MLPConfig:
         Linear layer configuration.
 
     """
+
     hidden_dim: int
     n_layers: int
     output_activation: str
     linear_cfg: LinearConfig
 
+
 @dataclass
 class LinearConfig:
-    """  
+    """
     A linear layer configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     activation : str
         Activation function.
     norm : Literal["layer", "rms", "none"]
         Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
     norm_cfg : dict
-        Normalization layer configuration. Default is {}. 
+        Normalization layer configuration. Default is {}.
     dropout : float
         Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
     norm_first : bool
@@ -184,6 +190,7 @@ class LinearConfig:
     bias : bool
         Whether to use bias. Default is True.
     """
+
     activation: str
     norm: Literal["layer", "rms", "none"] = "none"
     norm_cfg: dict[str, Any] = field(default_factory=dict)
@@ -191,13 +198,14 @@ class LinearConfig:
     norm_first: bool = False
     bias: bool = True
 
+
 @dataclass
 class TransformerConfig:
     """
     Transformer configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     d_model : int
         Dimension of model.
     nhead : int
@@ -214,6 +222,7 @@ class TransformerConfig:
         Activation function for output layer. Default is "GeLU".
 
     """
+
     d_model: int
     nhead: int
     dim_ff: int
@@ -222,13 +231,14 @@ class TransformerConfig:
     hidden_activation: Literal["ReLU", "GELU"] = "GELU"
     output_activation: str = "GeLU"
 
+
 @dataclass
 class ViTConfig:
     """
     Vision Transformer configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     patch_size : int
         Patch size.
     transformer_cfg : TransformerConfig
@@ -238,22 +248,24 @@ class ViTConfig:
     init_channel : int
         Initial number of channels. Default is 16.
     """
+
     patch_size: int
     transformer_cfg: TransformerConfig
-    cls_token: bool = True  
+    cls_token: bool = True
     init_channel: int = 16
+
 
 @dataclass
 class SpatialSoftmaxConfig:
     """
     Spatial softmax configuration.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     temperature : float
-        Softmax temperature. If it's set to 0.0, the layer outputs the coordinates of the maximum value. 
+        Softmax temperature. If it's set to 0.0, the layer outputs the coordinates of the maximum value.
         Otherwise, the layer outputs the expectation of the coordinates with softmax function.
         Default is 0.0.
     """
-    temperature: float = 0.0
 
+    temperature: float = 0.0
