@@ -67,7 +67,7 @@ class ConvConfig:
     norm_cfg: dict[str, Any] = field(default_factory=dict)
     scale_factor: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.norm == "none":
             self.norm_cfg = dict()
         else:

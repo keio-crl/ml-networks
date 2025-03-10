@@ -15,14 +15,13 @@ class Activation(nn.Module):
                 self.activation = TanhExp()
             elif activation == "REReLU":
                 self.activation = REReLU(**kwargs)
-            elif activation == "SiGLU" or activation == "SwiGLU":
+            elif activation in {"SiGLU", "SwiGLU"}:
                 self.activation = SiGLU(**kwargs)
             elif activation == "CRReLU":
                 self.activation = CRReLU(**kwargs)
             else:
-                raise NotImplementedError(
-                    f"Activation: '{activation}' is not implemented yet.",
-                )
+                msg = f"Activation: '{activation}' is not implemented yet."
+                raise NotImplementedError(msg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.activation(x)

@@ -1,5 +1,5 @@
 import random
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import numpy as np
 import pytorch_lightning as pl
@@ -241,8 +241,13 @@ def conv_transpose_out_shape(
 
 
 def conv_transpose_in_shape(
-    out_shape: tuple[int, ...], padding: int, kernel_size: int, stride: int, dilation: int = 1, output_padding: int = 0,
-):
+    out_shape: tuple[int, ...],
+    padding: int,
+    kernel_size: int,
+    stride: int,
+    dilation: int = 1,
+    output_padding: int = 0,
+) -> tuple[int, ...]:
     """
     Calculate the input size of transposed convolutional layer.
 
@@ -293,7 +298,7 @@ def output_padding_shape(
     kernel_size: int,
     stride: int,
     dilation: int = 1,
-):
+) -> tuple[int, ...]:
     """
     Calculate the output padding size of transposed convolutional layer.
 
@@ -336,7 +341,7 @@ def get_optimizer(
     param: Iterator[nn.Parameter],
     name: str,
     **kwargs,
-):
+) -> torch.optim.Optimizer:
     """
     Get optimizer from torch.optim or pytorch_optimizer.
 
@@ -377,9 +382,9 @@ def get_optimizer(
     elif hasattr(pytorch_optimizer, name):
         optimizer = getattr(pytorch_optimizer, name)
     else:
-        raise NotImplementedError(
-            f"Optimizer {name} is not implemented in torch.optim or pytorch_optimizer, schedulefree. Please check the name and capitalization.",
-        )
+        msg = f"Optimizer {name} is not implemented in torch.optim or pytorch_optimizer, schedulefree. "
+        msg += "Please check the name and capitalization."
+        raise NotImplementedError(msg)
     return optimizer(param, **kwargs)
 
 
@@ -390,12 +395,12 @@ class mytorch:
         inputs: torch.Tensor,
         dim: int,
         temperature: float = 1.0,
-    ):
+    ) -> torch.Tensor:
         """
         Softmax function with temperature. This prevents overflow and underflow.
 
-        Args:
-        -----
+        Parameters
+        ----------
         inputs : torch.Tensor
             Input tensor.
         dim : int
@@ -410,14 +415,9 @@ class mytorch:
         """
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = x / temperature
-
         x = torch.softmax(x, dim=dim)
-
         if torch.isinf(x).any() or torch.isnan(x).any():
-            print("inputs", inputs)
-            print("result", x)
             raise ValueError("softmax is inf or nan")
-
         return x
 
     @staticmethod
@@ -425,12 +425,12 @@ class mytorch:
         inputs: torch.Tensor,
         dim: int,
         temperature: float = 1.0,
-    ):
+    ) -> torch.Tensor:
         """
         Gumbel softmax function with temperature. This prevents overflow and underflow.
 
-        Args:
-        -----
+        Parameters
+        ----------
         inputs : torch.Tensor
             Input tensor.
         dim : int
@@ -446,8 +446,6 @@ class mytorch:
         x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
         x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
         if torch.isinf(x).any() or torch.isnan(x).any():
-            print("inputs", inputs)
-            print("result", x)
             raise ValueError("gumbel_softmax is inf or nan")
         return x
 
@@ -457,8 +455,8 @@ def determine_loader(
     seed: int,
     batch_size: int,
     shuffle: bool = True,
-    collate_fn=None,
-):
+    collate_fn: Callable | None = None,
+) -> DataLoader:
     """
     Determine DataLoader with fixed seed.
 
@@ -482,7 +480,7 @@ def determine_loader(
     """
     g = torch.Generator()
     g.manual_seed(seed)
-    loader = DataLoader(
+    return DataLoader(
         data,
         batch_size=batch_size,
         shuffle=shuffle,
@@ -492,16 +490,15 @@ def determine_loader(
         pin_memory=False,
         collate_fn=collate_fn,
     )
-    return loader
 
 
-def torch_fix_seed(seed=42):
-    """乱数を固定する関数
+def torch_fix_seed(seed: int = 42) -> None:
+    """
+    乱数を固定する関数.
 
-    各行でやっていることは
-        https://qiita.com/north_redwing/items/1e153139125d37829d2d
-    などに詳細あり
-
+    References
+    ----------
+    - https://qiita.com/north_redwing/items/1e153139125d37829d2d
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -509,15 +506,13 @@ def torch_fix_seed(seed=42):
     torch.set_float32_matmul_precision("medium")
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-    # torch.use_deterministic_algorithms = True
 
 
-def seed_worker(worker_id):
+def seed_worker(_worker_id: int) -> None:
     """
+    DataLoaderのworkerの固定.
 
-    DataLoaderのworkerの固定
     Dataloaderの乱数固定にはgeneratorの固定も必要らしい
-
     """
     worker_seed = torch.initial_seed() % 2**32
     pl.seed_everything(worker_seed)

@@ -12,7 +12,7 @@ from ml_networks.activations import Activation
 from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
 
 
-def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs):
+def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs) -> nn.Module:
     """
     Get normalization layer.
 
@@ -143,7 +143,7 @@ class LinearNormActivation(nn.Module):
         input_dim: int,
         output_dim: int,
         cfg: LinearConfig,
-    ):
+    ) -> None:
         super().__init__()
         self.linear = nn.Linear(
             input_dim,
@@ -161,7 +161,7 @@ class LinearNormActivation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -226,7 +226,7 @@ class MLPLayer(pl.LightningModule):
         input_dim: int,
         output_dim: int,
         cfg: MLPConfig,
-    ):
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.input_dim = input_dim
@@ -235,9 +235,9 @@ class MLPLayer(pl.LightningModule):
         self.n_layers = cfg.n_layers
         self.dense = self._build_dense()
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -252,9 +252,9 @@ class MLPLayer(pl.LightningModule):
         """
         return self.dense(x)
 
-    def _build_dense(self):
+    def _build_dense(self) -> nn.Module:
         """
-        Build dense layers
+        Build dense layers.
 
         Returns
         -------
@@ -386,7 +386,7 @@ class ConvNormActivation(nn.Module):
         in_channels: int,
         out_channels: int,
         cfg: ConvConfig,
-    ):
+    ) -> None:
         super().__init__()
         kernel_size: int = cfg.kernel_size
         stride: int = cfg.stride
@@ -401,11 +401,11 @@ class ConvNormActivation(nn.Module):
         scale_factor: int = cfg.scale_factor
         _out_channels = out_channels
         if "glu" in activation.lower():
-            _out_channels = _out_channels * 2
+            _out_channels *= 2
         if scale_factor > 0:
-            _out_channels = _out_channels * (abs(scale_factor) ** 2)
+            _out_channels *= (abs(scale_factor) ** 2)
         elif scale_factor < 0:
-            _out_channels = _out_channels // (abs(scale_factor) ** 2)
+            _out_channels //= (abs(scale_factor) ** 2)
         self.conv = nn.Conv2d(
             in_channels,
             _out_channels,
@@ -433,7 +433,7 @@ class ConvNormActivation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -455,8 +455,7 @@ class ConvNormActivation(nn.Module):
         x = self.norm(x)
         x = self.pixel_shuffle(x)
         x = self.activation(x)
-        x = self.dropout(x)
-        return x
+        return self.dropout(x)
 
 
 class ResidualBlock(nn.Module):
@@ -495,7 +494,7 @@ class ResidualBlock(nn.Module):
         norm: Literal["batch", "group", "none"] = "none",
         norm_cfg: DictConfig = DictConfig({}),
         dropout: float = 0.0,
-    ):
+    ) -> None:
         super(ResidualBlock, self).__init__()
         first_cfg = ConvConfig(
             activation=activation,
@@ -537,7 +536,7 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -611,7 +610,7 @@ class ConvTransposeNormActivation(nn.Module):
         in_channels: int,
         out_channels: int,
         cfg: ConvConfig,
-    ):
+    ) -> None:
         super().__init__()
 
         self.conv = nn.ConvTranspose2d(
@@ -625,7 +624,7 @@ class ConvTransposeNormActivation(nn.Module):
             bias=cfg.bias,
             dilation=cfg.dilation,
         )
-        if cfg.norm != "none" and cfg.norm != "group":
+        if cfg.norm not in {"none", "group"}:
             cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
             cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
@@ -635,7 +634,7 @@ class ConvTransposeNormActivation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -653,8 +652,7 @@ class ConvTransposeNormActivation(nn.Module):
         x = self.conv(x)
         x = self.norm(x)
         x = self.activation(x)
-        x = self.dropout(x)
-        return x
+        return self.dropout(x)
 
 
 class TransformerLayer(nn.Module):
@@ -694,7 +692,7 @@ class TransformerLayer(nn.Module):
         input_dim: int,
         output_dim: int,
         cfg: TransformerConfig,
-    ):
+    ) -> None:
         super().__init__()
         self.d_model = cfg.d_model
         self.input_dim = input_dim
@@ -735,9 +733,9 @@ class TransformerLayer(nn.Module):
             enable_nested_tensor=True,
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -751,8 +749,7 @@ class TransformerLayer(nn.Module):
         """
         x = self.in_proj(x)
         x = self.transformer(x)
-        x = self.out_proj(x)
-        return x
+        return self.out_proj(x)
 
 
 class PositionalEncoding(nn.Module):
@@ -783,7 +780,7 @@ class PositionalEncoding(nn.Module):
 
     """
 
-    def __init__(self, d_model: int, dropout: float, max_len: int):
+    def __init__(self, d_model: int, dropout: float, max_len: int) -> None:
         super().__init__()
 
         self.dropout = nn.Dropout(p=dropout) if dropout > 0 else nn.Identity()
@@ -797,7 +794,7 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -833,7 +830,6 @@ class PatchEmbed(nn.Module):
     >>> output = patch_embed(x)
     >>> output.shape
     torch.Size([1, 64, 16])
-
     """
 
     def __init__(
@@ -841,11 +837,9 @@ class PatchEmbed(nn.Module):
         emb_dim: int,
         patch_size: int,
         obs_shape: tuple[int, int, int],
-    ):
-        super(PatchEmbed, self).__init__()
+    ) -> None:
+        super().__init__()
         self.emb_dim = emb_dim
-        # パッチの数
-
         self.obs_shape = obs_shape
 
         # パッチの大きさ
@@ -865,7 +859,7 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass.
 
         Parameters
         ----------
@@ -888,13 +882,11 @@ class PatchEmbed(nn.Module):
         x = self.patch_emb_layer(x)
 
         # パッチのflatten (B, D, H/P, W/P) -> (B, D, Np)
-        # ここで、Npはパッチの数(=H*W/Pˆ2)
+        # ここで、Np はパッチの数( = H*W/Pˆ2)
         x = x.flatten(2)
 
         # 軸の入れ替え (B, D, Np) -> (B, Np, D)
-        x = x.transpose(1, 2)
-
-        return x
+        return x.transpose(1, 2)
 
 
 class SpatialSoftmaxFlatten(nn.Module):
@@ -917,8 +909,8 @@ class SpatialSoftmaxFlatten(nn.Module):
 
     """
 
-    def __init__(self, cfg: SpatialSoftmaxConfig):
-        super(SpatialSoftmaxFlatten, self).__init__()
+    def __init__(self, cfg: SpatialSoftmaxConfig) -> None:
+        super().__init__()
         temperature = cfg.temperature
         assert temperature >= 0.0, "temperature must be non-negative"
         if temperature > 0.0:
