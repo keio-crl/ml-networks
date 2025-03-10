@@ -376,6 +376,7 @@ class ViT(nn.Module):
 
     Examples
     --------
+    >>> from ml_networks.layers import TransformerConfig
     >>> in_shape = (3, 64, 64)
     >>> cfg = ViTConfig(
     ...     patch_size=8,
@@ -396,8 +397,6 @@ class ViT(nn.Module):
     >>> y = encoder(x)
     >>> y.shape
     torch.Size([2, 1, 64, 64])
-
-
     """
 
     def __init__(
