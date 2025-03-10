@@ -5,9 +5,9 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import torch_optimizer
+import pytorch_optimizer
+import schedulefree
 from torch.utils.data import DataLoader, Dataset
-from schedulefree import RAdamScheduleFree
 
 
 def conv_out(h_in, padding, kernel_size, stride, dilation=1):
@@ -42,18 +42,17 @@ def output_padding_shape(h_in, conv_out, padding, kernel_size, stride, dilation=
 
 
 def get_optimizer(
-    param: Iterator[nn.Parameter], name: str, lr: float, amsgrad: bool = False
+    param: Iterator[nn.Parameter], name: str, **kwargs
 ):
-    if name == "RAdamScheduleFree":
-        optimizer = RAdamScheduleFree
-        return optimizer(param, lr=lr)
-    if hasattr(torch.optim, name):
+    if hasattr(schedulefree, name):
+        optimizer = getattr(schedulefree, name)
+    elif hasattr(torch.optim, name):
         optimizer = getattr(torch.optim, name)
-    elif hasattr(torch_optimizer, name):
-        optimizer = getattr(torch_optimizer, name)
+    elif hasattr(pytorch_optimizer, name):
+        optimizer = getattr(pytorch_optimizer, name)
     else:
-        raise NotImplementedError
-    return optimizer(param, lr=lr, amsgrad=amsgrad)
+        raise NotImplementedError(f"Optimizer {name} is not implemented in torch.optim or pytorch_optimizer, schedulefree. Please check the name and capitalization.")
+    return optimizer(param, **kwargs)
 
 
 class mytorch:
