@@ -49,14 +49,21 @@ print(y.shape)
 そんなに強いエンコーダがいらない時は，以下のように使うことができます．
 強いエンコーダが必要な場合は，[timm](https://github.com/huggingface/pytorch-image-models)でも使ってください．
 （参考:https://zenn.dev/piment/articles/4ff3b6dfd73103）
+
+#### Import
 ```python
 
 from ml_networks import (Encoder, ConvNetConfig,
                          ViTConfig, ResNetConfig,
                          MLPConfig, LinearConfig)
 
-# アーキテクチャを変えたい場合は引数に渡すConfigを変える
-## 多層CNN+MLPのエンコーダ
+```
+#### backboneの設定
+画像の処理を行うアーキテクチャを変えたい場合は引数に渡すConfigを変える
+
+```python
+ 
+# 多層CNN+MLPのエンコーダ
 encoder_config = ConvNetConfig(
     channels=[16, 32, 64],
     conv_cfgs=[
@@ -65,33 +72,47 @@ encoder_config = ConvNetConfig(
             stride=2, # ストライド
             padding=1, # パディング
             dilation=1, # ダイレーション．変えることはほぼない．Default: 1
-            activation="ReLU", # 活性化関数. 大文字小文字を間違えないように．pytorchに実装されているものに加えてml_networksに実装されているものも使える．
+            activation="ReLU", # 活性化関数. 大文字小文字を間違えないように．
+                               # pytorchに実装されているものに加えて，
+                               # ml_networks.activationsに実装されているものも使える．
             groups=1, # 入力channelを何グループに分けるか．変えることはほぼない．Default: 1
             bias=True, # バイアスを使うかどうか．変えることはほぼない．Default: True
-            norm="none", # 正規化を行うかどうか．"none"で正規化なし．"batch"でバッチ正規化．"group"+norm_cfgの設定でGroupNorm, InstanceNorm, LayerNormが使える．
-            norm_cfg={}, # 正規化の設定．それぞれの正規化層で変更できる設定はpytorch公式ドキュメントを参照．"num_groups"の設定でGroupNorm, InstanceNorm, LayerNormに切り替え可能.
-
+            norm="none", # 正規化を行うかどうか．"none"で正規化なし．"batch"でバッチ正規化．
+                         # "group"+norm_cfgの設定でGroupNorm, InstanceNorm, LayerNormが使える．
+            norm_cfg={}, # 正規化の設定．それぞれの正規化層で変更できる設定はpytorch公式ドキュメントを参照．
+                         # "num_groups"の設定でGroupNorm, InstanceNorm, LayerNormに切り替え可能.
+            dropout=0.0, # ドロップアウト率．0より大きくするとその割合だけドロップアウトする．Default: 0.0
+            scale_factor=0 # PixelUnShuffle・PixelShuffleのスケールファクタ．
+                           # 0より大きいとPixelShuffle, 0より小さいとPixelUnShuffleが設定のスケールで行われる．
+                           # Default: 0
         ),
         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"),
         ConvConfig(kernel_size=3, stride=2, padding=1, activation="ReLU"),
     ]
 )
 
-## ResNet+PixelUnShuffleのエンコーダ
+# ResNet+PixelUnShuffleのエンコーダ
 encoder_config = ResNetConfig(
-    conv_channel=64,
-    conv_kernel=3,
-    f_kernel=3,
-    conv_activation="ReLU",
-    output_activation="ReLU",
-    n_res_blocks=3,
-    scale_factor=2,
-    n_scaling=3,
-    norm="batch",
-    norm_cfg={"affine": True},
-    dropout=0.0,
+    conv_channel=64, # channel数. 全ての層で同じchannel
+    conv_kernel=3, # カーネルサイズ
+    f_kernel=3, # 最初 or 最後の層のカーネルサイズ
+    conv_activation="ReLU", # 活性化関数
+    output_activation="ReLU", # 出力層の活性化関数
+    n_res_blocks=3, # ResBlockの数
+    scale_factor=2, # PixelUnShuffleのスケールファクタ. 1回のPixelUnShuffleで何分の一にするか．
+    n_scaling=3, # PixelUnShuffleの数
+    norm="batch", # 正規化の種類. ConvConfigと同じ．
+    norm_cfg={"affine": True}, # 正規化の設定. ConvConfigと同じ．
+    dropout=0.0, # ドロップアウト率. ConvConfigと同じ．
 )
 
+```
+#### 全結合層の設定
+特徴次元に変換する全結合層の設定を行う．
+
+```python
+
+# 何層かの全結合層を追加する場合は以下のように設定する
 full_connection_cfg = MLPConfig(
     hidden_dim=128,
     n_layers=2,
@@ -101,6 +122,21 @@ full_connection_cfg = MLPConfig(
         bias=True,
     )
 )
+
+# 畳み込みの後すぐに特徴次元にする場合は以下のように設定する
+full_connection_cfg = LinearConfig(
+    activation="ReLU",
+    bias=True,
+)
+
+# 特徴マップをそのまま出力する場合は以下のように設定する
+full_connection_cfg = None
+
+```
+
+#### 使用例
+```python
+
 obs_shape = (3, 64, 64)
 feature_dim = 64
 
