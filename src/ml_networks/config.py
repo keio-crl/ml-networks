@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Literal, Union, Tuple
+from typing import  Literal, Tuple, Any
 
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning import Callback
 
 
 def load_config(path: str) -> DictConfig:
@@ -64,7 +63,7 @@ class ConvConfig:
     bias: bool = True
     dropout: float = 0.0
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: dict = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     scale_factor: int = 0
 
     def __post_init__(self):
@@ -139,7 +138,7 @@ class ResNetConfig:
     scale_factor: int = 2
     n_scaling: int = 2
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: dict = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     init_channel: int = 16
 
@@ -187,7 +186,7 @@ class LinearConfig:
     """
     activation: str
     norm: Literal["layer", "rms", "none"] = "none"
-    norm_cfg: dict = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     norm_first: bool = False
     bias: bool = True
