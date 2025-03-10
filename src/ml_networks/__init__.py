@@ -1,6 +1,5 @@
-from .utils import *
+from .activations import *
 from .config import *
 from .layers import *
-from .activations import *
+from .utils import *
 from .vision import *
-
