@@ -35,7 +35,7 @@ class FocalFrequencyLoss:
         whether to calculate the spectrum weight matrix using batch-based statistics. Default: False
     """
 
-    def __init__(self, loss_weight=1.0, alpha=2.0, patch_factor=1, ave_spectrum=False, log_matrix=False, batch_matrix=False):
+    def __init__(self, loss_weight=1.0, alpha=1.0, patch_factor=1, ave_spectrum=False, log_matrix=False, batch_matrix=False):
         self.loss_weight = loss_weight
         self.alpha = alpha
         self.patch_factor = patch_factor
