@@ -32,7 +32,7 @@ install時はアカウント名とパスワードが求められる場合があ�
 2. [Encoder](#Encoder)
 3. [Decoder](#Decoder)
 4. [Distributions](#Distributions)
-5. [Data Save and Load](#データの保存, 読込)
+5. [Data Save and Load](#データの保存・読込)
 6. [Loss Functions](#損失関数)
 7. [その他便利なものたち](#その他便利なものたち)
 
