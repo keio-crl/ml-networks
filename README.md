@@ -32,7 +32,7 @@ install時はアカウント名とパスワードが求められる場合があ�
 2. [Encoder](#Encoder)
 3. [Decoder](#Decoder)
 4. [Distributions](#Distributions)
-5. [Data Save and Load](#データの保存・読み込み)
+5. [Data Save and Load](#データの保存・読込)
 6. [Loss Functions](#損失関数)
 7. [その他便利なものたち](#その他便利なものたち)
 
@@ -384,7 +384,7 @@ dist_z.save("reports")
 
 ```
 
-### データの保存・読み込み
+### データの保存・読込
 blosc2形式でデータを保存・読み込みすることを推奨．
 圧縮率が高く，保存も高速．refer to [blosc2](https://zenn.dev/zaburo_ch/articles/a13a0772d2f251)
 
