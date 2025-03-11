@@ -5,7 +5,7 @@ import torch
 import torch.distributions as D
 import torch.nn.functional as F
 import torch.nn as nn
-from ml_networks.utils import mytorch, save_blosc2
+from ml_networks.utils import save_blosc2, softmax
 from dataclasses import dataclass
 
 @dataclass
@@ -100,8 +100,8 @@ class NormalStoch:
         save_blosc2(f"{path}/std.blosc2", self.std.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self):
-        return D.Independent(D.Normal(self.mean, self.std), 1)
+    def get_distribution(self, independent: int = 1):
+        return D.Independent(D.Normal(self.mean, self.std), independent)
 
 @dataclass
 class CategoricalShape:
@@ -190,8 +190,8 @@ class CategoricalStoch:
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self):
-        return D.Independent(D.OneHotCategoricalStraightThrough(self.probs), 1)
+    def get_distribution(self, independent: int = 1):
+        return D.Independent(D.OneHotCategoricalStraightThrough(self.probs), independent)
 
 @dataclass
 class BernoulliShape:
@@ -273,8 +273,8 @@ class BernoulliStoch:
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self):
-        return D.Independent(BernoulliStraightThrough(self.probs), 1)
+    def get_distribution(self, independent: int = 1):
+        return D.Independent(BernoulliStraightThrough(self.probs), independent)
 
 StochState = Union[NormalStoch, CategoricalStoch, BernoulliStoch]
 
@@ -504,7 +504,7 @@ class Distribution(nn.Module):
         logits_chunk = torch.chunk(logits, self.n_groups, dim=-1)
         logits = torch.stack(logits_chunk, dim=-2)
         logits = logits
-        probs = mytorch.softmax(logits, dim=-1, temperature=1/inv_tmp)
+        probs = softmax(logits, dim=-1, temperature=1/inv_tmp)
         posterior_dist = D.OneHotCategoricalStraightThrough(probs=probs)
         posterior_dist = D.Independent(posterior_dist, 1)
 
