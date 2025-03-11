@@ -31,7 +31,10 @@ install時はアカウント名とパスワードが求められる場合があ�
 1. [MLP](#MLP)
 2. [Encoder](#Encoder)
 3. [Decoder](#Decoder)
-4. [その他便利なものたち](#その他便利なものたち)
+4. [Distributions](#Distributions)
+5. [Data Save and Load](#データの保存・読み込み)
+6. [Loss Functions](#損失関数)
+7. [その他便利なものたち](#その他便利なものたち)
 
 ### MLP
 
@@ -216,7 +219,7 @@ encoder_config = ResNetConfig(
     conv_activation="ReLU", # 活性化関数
     output_activation="Tanh", # 出力層の活性化関数
     n_res_blocks=3, # ResBlockの数
-    scale_factor=2, # PixelShuffleのスケールファクタ. 1回のPixelUhuffleで何倍にするか
+scale_factor=2, # PixelShuffleのスケールファクタ. 1回のPixelUhuffleで何倍にするか
     n_scaling=3, # PixelUnShuffleの数
     norm="batch", # 正規化の種類. ConvConfigと同じ．
     norm_cfg={"affine": True}, # 正規化の設定. ConvConfigと同じ．
@@ -238,7 +241,8 @@ feature_dim = 64
 ## feature_dim = <backboneの入力特徴マップ次元>
 ## 違うのを渡すとエラーが出る．
 
-encoder = Encoder(feature_dim, obs_shape, decoder_cfg, full_connection_cfg)
+decoder = decoder(feature_dim, obs_shape, decoder_cfg, full_connection_cfg)
+
 
 z = torch.randn(32, feature_dim)
 predicted_obs = decoder(z)
@@ -246,6 +250,222 @@ print(predicted_obs.shape)
 >>> torch.Size([32, 3, 64, 64])
 
 ```
+
+### Distributions
+stringで分布を指定．
+#### 正規分布
+
+```python
+from ml_networks import Distribution
+
+feature_dim = 64
+
+# ガウス分布を使う場合は平均と標準偏差で特徴量次元の2倍の次元が必要
+full_connection_cfg = MLPConfig(
+    hidden_dim=128,
+    n_layers=2,
+    output_activation="Identity", # 出力層の活性化関数は分布に変換する場合何もかけないのがいい．
+                                  # Identityを指定すると何もかけない．
+    linaer_cfg=LinearConfig(
+        activation="ReLU",
+        bias=True,
+    )
+)
+encoder = Encoder(feature_dim*2, obs_shape, encoder_cfg, full_connection_cfg)
+
+
+dist = Distribution(
+        in_dim = feature_dim, # 分布の次元
+                              # 正規分布なら平均（標準偏差）の次元
+                              # カテゴリカル分布ならカテゴリ数×各カテゴリの次元
+                              # ベルヌーイ分布なら超球の数×超球の次元
+        dist = "normal", # 分布の種類. Literal["normal", "categorical", "bernoulli"]
+        n_gropus = 1, # 分布のグループ数．ガウス分布の場合は意味ない. Default: 1
+                      # カテゴリカル分布の場合はカテゴリ数．ベルヌーイ分布の場合は超球の数
+        spherical = False,  # カテゴリカル分布の場合には{0, 1} -> {-1, 1}．Default: False
+                            # ベルヌーイ分布の場合に超球にするかどうか．Default: False
+)
+
+z = encoder(obs)
+
+# 自動的に分布のパラメータへの変換・再パラメータ化トリックが適用される
+dist_z = dist(z)
+print(dist_z)
+>>> NormalStoch(mean: torch.Size([32, 64]), std: torch.Size([32, 64]), stoch: torch.Size([32, 64])
+# mean は平均，std は標準偏差，stoch はサンプリングされた特徴量
+
+# torch.distributions.Distributionに変換
+torch_dist_z = dist_z.get_distribution(
+                independent=1 # データの次元数はいくつか. 基本的に1にしておけばOK. Default: 1
+                )
+
+import torch.distributions as D
+
+normal = D.Normal(0, 1)
+
+# KLDの計算
+kld = D.kl_divergence(torch_dist_z, normal).mean()
+
+```
+
+#### カテゴリカル分布
+
+```python
+encoder = Encoder(feature_dim, obs_shape, encoder_cfg, full_connection_cfg)
+
+dist = Distribution(
+        in_dim = feature_dim,
+        dist = "categorical",
+        n_gropus = 8, # feature_dimがn_gropusの倍数でないとエラーが出る．
+)
+z = encoder(obs)
+
+dist_z = dist(z)
+print(dist_z)
+>>> CategoricalStoch(logits: torch.Size([32, 8, 8]), stoch: torch.Size([32, 8, 8]), probs: torch.Size([32, 8, 8]))
+
+flat_dist = D.OneHotCategorical(probs=torch.ones_like(dist_z.probs)/dist_z.probs.shape[-1])
+# KLDの計算
+kld = D.kl_divergence(dist_z.get_distribution(), flat_dist).mean()
+
+```
+
+#### 分布データのstack, concatenate
+```python
+
+dist_list = []
+len(dataloader)
+>>> 100
+for batch in dataloader:
+    obs = batch["obs"]
+    obs.shape 
+    >>> torch.Size([32, 3, 64, 64])
+    z = encoder(obs)
+    dist_z = dist(z)
+    dist_list.append(dist_z)
+
+# 分布データをstack
+from ml_networks import stack_dist
+stacked_dist = stack_dist(
+    dist_list, 
+    dim=0 # どの次元でstackするか．Default: 0
+)
+print(stacked_dist.shape)
+>>> NormalShape(mean: torch.Size([100, 32, 64]), std: torch.Size([100, 32, 64]), stoch: torch.Size([100, 32, 64]))
+
+# 分布データをconcatenate
+from ml_networks import cat_dist
+concatenated_dist = cat_dist(
+    dist_list,
+    dim=-1 # どの次元でconcatenateするか．Default: -1
+)
+print(concatenated_dist.shape)
+>>> NormalShape(mean: torch.Size([32, 6400]), std: torch.Size([32, 6400]), stoch: torch.Size([32, 6400]))
+
+```
+
+#### 分布データの保存
+```python
+from ml_networks import Distribution
+
+dist = Distribution(
+        in_dim = feature_dim,
+        dist = "normal",
+        n_gropus = 1,
+)
+
+z = encoder(obs)
+dist_z = dist(z)
+
+# 分布データの保存
+dist_z.save("reports")
+# reportsの下にmean.blosc2, std.blosc2, stoch.blosc2が保存される．
+# 他の分布データも同様に保存される．
+
+```
+
+### データの保存・読み込み
+blosc2形式でデータを保存・読み込みすることを推奨．
+圧縮率が高く，保存も高速．refer to [blosc2](https://zenn.dev/zaburo_ch/articles/a13a0772d2f251)
+
+```python
+
+from ml_networks import save_blosc2, load_blosc2
+
+# numpy形式のデータを作成
+data = torch.randn(32, 3, 64, 64).detach().cpu().numpy()
+
+# 保存
+save_blosc2(data, "dataset/image.blosc2")
+
+# 読み込み
+loaded_data = load_blosc2("dataset/image.blosc2")
+
+```
+
+### 損失関数
+
+#### Focal Loss
+分類の学習に良いもの．refer to [Focal Loss](https://qiita.com/agatan/items/53fe8d21f2147b0ac982)
+```python
+from ml_networks import focal_loss, binary_focal_loss
+
+# 多クラス分類の場合
+logits = torch.randn(32, 10)
+labels = torch.randint(0, 10, (32,))
+loss = focal_loss(
+    logits, 
+    labels, 
+    gamma=2.0, # Focal Lossの重みの調整. 論文を見て．Default: 2.0
+    sum_dim=-1 # どの次元でsumするか．他の次元は平均を取る．Default: -1
+)
+
+# 二値分類の場合
+logits = torch.randn(32)
+labels = torch.randint(0, 2, (32,))
+loss = binary_focal_loss(
+    logits, 
+    labels, 
+    gamma=2.0, # Focal Lossの重みの調整. 論文を見て．Default: 2.0
+    sum_dim=-1 # どの次元でsumするか．他の次元は平均を取る．Default: -1
+)
+
+```
+
+#### 画像再構成の損失関数
+画像再構成の損失関数．
+
+[charbonnier loss](https://arxiv.org/abs/1701.03077)と[focal frequency loss](https://arxiv.org/abs/2012.12821)が使える．
+```python
+from ml_networks import FocalFrequencyLoss, charbonnier
+
+# charbonnier loss
+# 損失の勾配が安定するらしい
+loss = charbonnier(
+    predicted_obs, 
+    obs, 
+    epsilon = 1e-3, # charbonnier lossのパラメータ．Default: 1e-3
+    alpha=1, # charbonnier lossのパラメータ．Default: 0.45
+    sum_dim=[-1, -2, -3] # どの次元でsumするか．他の次元は平均を取る．Default: [-1, -2, -3] 
+)
+
+# focal frequency loss
+# 画像自体でなく，画像の周波数成分に焦点を当てた損失関数
+# モチベーションとしてはFocal Lossを画像に適用したもの
+
+loss_fn = FocalFrequencyLoss(
+    loss_weight=1.0, # Focal Frequency Lossの重み Default: 1.0
+    alpha=1.0, # spectrum weightのscaling factor Default: 1.0
+    patch_factor=1, # the factor to crop image patches for patch-based focal frequency loss. Default: 1
+    ave_spectrum=False, # whether to use minibatch average spectrum. Default: False
+    log_matrix=False, # whether to adjust the spectrum weight matrix by logarithm. Default: False
+    batch_matrix=False # whether to calculate the spectrum weight matrix using batch-based statistics. Default: False
+)
+
+loss = loss_fn(predicted_obs, obs)
+```
+
+
 ### その他便利なものたち
 #### activations
 stringで活性化関数を指定．
