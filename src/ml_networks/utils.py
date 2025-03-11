@@ -9,13 +9,53 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 import blosc2
+import numpy as np
+
 
 def save_blosc2(path: str, x: np.ndarray) -> None:
+    """
+    Save numpy array with blosc2 compression.
+
+    Args:
+    -----
+    path : str
+        Path to save.
+    x : np.ndarray
+        Numpy array to save.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> save_blosc2("test.blosc2", np.random.randn(10, 10))
+
+    """
     with open(path, "wb") as f:
         f.write(blosc2.pack_array2(x))
 
 
 def load_blosc2(path: str) -> np.ndarray:
+    """
+    Load numpy array with blosc2 compression.
+
+    Args:
+    -----
+    path : str
+        Path to load.
+
+    Returns
+    -------
+    np.ndarray
+        Numpy array.
+
+    Examples
+    --------
+    >>> data = load_blosc2("test.blosc2")
+    >>> type(data)
+    <class 'numpy.ndarray'>
+    """
     with open(path, "rb") as f:
         return blosc2.unpack_array2(f.read())
 
