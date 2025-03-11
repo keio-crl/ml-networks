@@ -1,7 +1,6 @@
 import random
 from collections.abc import Callable, Iterator
 
-import numpy as np
 import pytorch_lightning as pl
 import pytorch_optimizer
 import schedulefree
@@ -101,7 +100,14 @@ def conv_transpose_out(
     return (h_in - 1) * stride - 2 * padding + dilation * (kernel_size - 1) + output_padding + 1
 
 
-def conv_transpose_in(h_out, padding, kernel_size, stride, dilation=1, output_padding=0):
+def conv_transpose_in(
+    h_out: int,
+    padding: int,
+    kernel_size: int,
+    stride: int,
+    dilation: int = 1,
+    output_padding: int = 0,
+) -> int:
     """
     Calculate the input size of transposed convolutional layer.
 
@@ -367,7 +373,7 @@ def output_padding_shape(
 def get_optimizer(
     param: Iterator[nn.Parameter],
     name: str,
-    **kwargs,
+    **kwargs: float | str | bool,
 ) -> torch.optim.Optimizer:
     """
     Get optimizer from torch.optim or pytorch_optimizer.
@@ -415,78 +421,76 @@ def get_optimizer(
     return optimizer(param, **kwargs)
 
 
-class mytorch:
-    @staticmethod
-    @torch.jit.script
-    def softmax(
-        inputs: torch.Tensor,
-        dim: int,
-        temperature: float = 1.0,
-    ) -> torch.Tensor:
-        """
-        Softmax function with temperature. This prevents overflow and underflow.
+@torch.jit.script
+def softmax(
+    inputs: torch.Tensor,
+    dim: int,
+    temperature: float = 1.0,
+) -> torch.Tensor:
+    """
+    Softmax function with temperature. This prevents overflow and underflow.
 
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            Input tensor.
-        dim : int
-            Dimension to apply softmax.
-        temperature : float
-            Temperature. Default is 1.0.
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        Input tensor.
+    dim : int
+        Dimension to apply softmax.
+    temperature : float
+        Temperature. Default is 1.0.
 
-        Returns
-        -------
-        torch.Tensor
-            Softmaxed tensor.
+    Returns
+    -------
+    torch.Tensor
+        Softmaxed tensor.
 
-        Raises
-        ------
-        ValueError
-            If the softmax is inf or nan.
-        """
-        x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
-        x = x / temperature
-        x = torch.softmax(x, dim=dim)
-        if torch.isinf(x).any() or torch.isnan(x).any():
-            msg = "softmax is inf or nan"
-            raise ValueError(msg)
-        return x
+    Raises
+    ------
+    ValueError
+        If the softmax is inf or nan.
+    """
+    x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
+    x = x / temperature
+    x = torch.softmax(x, dim=dim)
+    if torch.isinf(x).any() or torch.isnan(x).any():
+        msg = "softmax is inf or nan"
+        raise ValueError(msg)
+    return x
 
-    @staticmethod
-    def gumbel_softmax(
-        inputs: torch.Tensor,
-        dim: int,
-        temperature: float = 1.0,
-    ) -> torch.Tensor:
-        """
-        Gumbel softmax function with temperature. This prevents overflow and underflow.
 
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            Input tensor.
-        dim : int
-            Dimension to apply softmax.
-        temperature : float
-            Temperature. Default is 1.0.
+def gumbel_softmax(
+    inputs: torch.Tensor,
+    dim: int,
+    temperature: float = 1.0,
+) -> torch.Tensor:
+    """
+    Gumbel softmax function with temperature. This prevents overflow and underflow.
 
-        Returns
-        -------
-        torch.Tensor
-            Gumbel softmaxed tensor.
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        Input tensor.
+    dim : int
+        Dimension to apply softmax.
+    temperature : float
+        Temperature. Default is 1.0.
 
-        Raises
-        ------
-        ValueError
-            If the gumbel_softmax is inf or nan.
-        """
-        x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
-        x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
-        if torch.isinf(x).any() or torch.isnan(x).any():
-            msg = "gumbel_softmax is inf or nan"
-            raise ValueError(msg)
-        return x
+    Returns
+    -------
+    torch.Tensor
+        Gumbel softmaxed tensor.
+
+    Raises
+    ------
+    ValueError
+        If the gumbel_softmax is inf or nan.
+    """
+    x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
+    x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
+    if torch.isinf(x).any() or torch.isnan(x).any():
+        msg = "gumbel_softmax is inf or nan"
+        raise ValueError(msg)
+    return x
 
 
 def determine_loader(
@@ -540,7 +544,6 @@ def torch_fix_seed(seed: int = 42) -> None:
     - https://qiita.com/north_redwing/items/1e153139125d37829d2d
     """
     random.seed(seed)
-    np.random.seed(seed)
     pl.seed_everything(seed)
     torch.set_float32_matmul_precision("medium")
     torch.backends.cudnn.benchmark = False

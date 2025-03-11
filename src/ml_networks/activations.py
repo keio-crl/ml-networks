@@ -1,16 +1,20 @@
+from typing import Any
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 
 class Activation(nn.Module):
-    def __init__(self, activation: str, **kwargs) -> None:
+    """Generic activation function."""
+
+    def __init__(self, activation: str, **kwargs: Any) -> None:
         super().__init__()
         if "glu" not in activation.lower():
             kwargs.pop("dim", None)
         try:
             self.activation = getattr(nn, activation)(**kwargs)
-        except AttributeError:
+        except AttributeError as err:
             if activation == "TanhExp":
                 self.activation = TanhExp()
             elif activation == "REReLU":
@@ -21,7 +25,7 @@ class Activation(nn.Module):
                 self.activation = CRReLU(**kwargs)
             else:
                 msg = f"Activation: '{activation}' is not implemented yet."
-                raise NotImplementedError(msg)
+                raise NotImplementedError(msg) from err
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.activation(x)
@@ -59,27 +63,28 @@ class REReLU(nn.Module):
 
 
 class CRReLU(nn.Module):
+    """
+    Correction Regularized ReLU activation function. This is a variant of ReLU activation function.
+
+    References
+    ----------
+    https://openreview.net/forum?id=7TZYM6Hm9p
+
+    Parameters
+    ----------
+    lr : float
+        Learning rate. Default is 0.01.
+
+    Examples
+    --------
+    >>> crrelu = CRReLU()
+    >>> x = torch.randn(1, 3)
+    >>> output = crrelu(x)
+    >>> output.shape
+    torch.Size([1, 3])
+    """
+
     def __init__(self, lr: float = 0.01) -> None:
-        """
-        Correction Regularized ReLU activation function. This is a variant of ReLU activation function.
-
-        References
-        ----------
-        https://openreview.net/forum?id=7TZYM6Hm9p
-
-        Parameters
-        ----------
-        lr : float
-            Learning rate. Default is 0.01.
-
-        Examples
-        --------
-        >>> crrelu = CRReLU()
-        >>> x = torch.randn(1, 3)
-        >>> output = crrelu(x)
-        >>> output.shape
-        torch.Size([1, 3])
-        """
         super().__init__()
         self.lr = nn.Parameter(torch.tensor(lr).float())
 
@@ -88,35 +93,36 @@ class CRReLU(nn.Module):
 
 
 class SiGLU(nn.Module):
+    """
+    SiGLU activation function.
+
+    This is equivalent to SwiGLU (Swish variant of Gated Linear Unit) activation function.
+
+    References
+    ----------
+    https://arxiv.org/abs/2102.11972
+
+    Parameters
+    ----------
+    dim : int
+        Dimension to split the tensor. Default is -1.
+
+    Examples
+    --------
+    >>> siglu = SiGLU()
+    >>> x = torch.randn(1, 4)
+    >>> output = siglu(x)
+    >>> output.shape
+    torch.Size([1, 2])
+
+    >>> siglu = SiGLU(dim=0)
+    >>> x = torch.randn(4, 1)
+    >>> output = siglu(x)
+    >>> output.shape
+    torch.Size([2, 1])
+    """
+
     def __init__(self, dim: int = -1) -> None:
-        """
-        SiGLU activation function.
-
-        This is equivalent to SwiGLU (Swish variant of Gated Linear Unit) activation function.
-
-        References
-        ----------
-        https://arxiv.org/abs/2102.11972
-
-        Parameters
-        ----------
-        dim : int
-            Dimension to split the tensor. Default is -1.
-
-        Examples
-        --------
-        >>> siglu = SiGLU()
-        >>> x = torch.randn(1, 4)
-        >>> output = siglu(x)
-        >>> output.shape
-        torch.Size([1, 2])
-
-        >>> siglu = SiGLU(dim=0)
-        >>> x = torch.randn(4, 1)
-        >>> output = siglu(x)
-        >>> output.shape
-        torch.Size([2, 1])
-        """
         super().__init__()
         self.dim = dim
 
@@ -143,6 +149,8 @@ class TanhExp(nn.Module):
 
 
 class TanhExpBase(torch.autograd.Function):
+    """Base autograd class for TanhExp activation function."""
+
     generate_vmap_rule = True
 
     @staticmethod
@@ -151,18 +159,16 @@ class TanhExpBase(torch.autograd.Function):
 
     @staticmethod
     def setup_context(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         inputs: torch.Tensor,
-        output: torch.Tensor,
+        output: torch.Tensor,  # noqa: ARG004
     ) -> None:
         ctx.save_for_backward(*inputs)
 
     @staticmethod
-    def backward(ctx, grad_output: torch.Tensor):
+    def backward(ctx: torch.autograd.function.FunctionCtx, grad_output: torch.Tensor) -> torch.Tensor:
         (x,) = ctx.saved_tensors
-
-        grad_input = grad_output * (x.exp().tanh() - (x * x.exp() * (x.exp().tanh() ** 2 - 1)))
-        return grad_input
+        return grad_output * (x.exp().tanh() - (x * x.exp() * (x.exp().tanh() ** 2 - 1)))
 
 
 if __name__ == "__main__":

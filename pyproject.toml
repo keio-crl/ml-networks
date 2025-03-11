@@ -45,11 +45,24 @@ target-version = "py310"
 [tool.ruff.lint]
 preview = true
 select = ["ALL"]
-ignore = ["CPY", "S101"]
+ignore = [
+    "CPY",    # copyright はいらない
+    "FBT",    # 必要
+    "PLR",    # too-many はしょうがない
+    "S101",   # assetionは必要
+    "N812",   # torch.nn.functional as F のため
+    "D102",   # 面倒なので
+    "ANN401", # しょうがない
+    "D100",   # そのうち修正する
+]
 fixable = ["ALL"]
 unfixable = []
 exclude = [".git", ".ruff_cache", ".venv",]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["D"]
+"callbacks.py" = ["ARG002"]
 
 [tool.ruff.format]
 preview = true

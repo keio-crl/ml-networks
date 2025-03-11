@@ -1,19 +1,19 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
-def load_config(path: str) -> DictConfig:
-    """Convert model config `.yaml` to `Dictconfig` with custom resolvers."""
-    path = Path(path)
+def load_config(path: str) -> DictConfig | ListConfig:
+    """
+    Convert model config `.yaml` to `Dictconfig` with custom resolvers.
 
-    config = OmegaConf.load(path)
-
-    return config
+    Returns
+    -------
+    DictConfig
+    """
+    return OmegaConf.load(Path(path))
 
 
 @dataclass
@@ -68,8 +68,9 @@ class ConvConfig:
     scale_factor: int = 0
 
     def __post_init__(self) -> None:
+        """Set `.norm_cfg`."""
         if self.norm == "none":
-            self.norm_cfg = dict()
+            self.norm_cfg = {}
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
@@ -84,7 +85,8 @@ class ConvNetConfig:
     channels : Tuple[int, ...]
         Number of channels for each layer.
     conv_cfgs : Tuple[ConvConfig, ...]
-        Convolutional layer configurations. The length of conv_cfgs should be the same as the length of channels.
+        Convolutional layer configurations.
+        The length of conv_cfgs should be the same as the length of channels.
     init_channel : int
         Initial number of channels, especially for transposed convolution.
     """
@@ -93,7 +95,8 @@ class ConvNetConfig:
     conv_cfgs: tuple[ConvConfig, ...]
     init_channel: int = 16
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Set `channels` and `conv_cfgs` as tuple."""
         self.conv_cfgs = tuple(self.conv_cfgs)
         self.channels = tuple(self.channels)
 
@@ -106,11 +109,14 @@ class ResNetConfig:
     Attributes
     ----------
     conv_channel : int
-        Number of channels for convolutional layer. In ResNet, common number of channels is used for all layers.
+        Number of channels for convolutional layer.
+        In ResNet, common number of channels is used for all layers.
     conv_kernel : int
-        Kernel size for convolutional layer. In ResNet, common kernel size is used for all layers.
+        Kernel size for convolutional layer.
+        In ResNet, common kernel size is used for all layers.
     f_kernel : int
-        Kernel size for final or first convolutional layer. This depends on whether PixelShuffle or PixelUnshuffle is used.
+        Kernel size for final or first convolutional layer.
+        This depends on whether PixelShuffle or PixelUnshuffle is used.
     conv_activation : str
         Activation function for convolutional layer.
     out_activation : str
@@ -147,30 +153,6 @@ class ResNetConfig:
 
 
 @dataclass
-class MLPConfig:
-    """
-    Multi-layer perceptron configuration.
-
-    Attributes
-    ----------
-    hidden_dim : int
-        Number of hidden units.
-    n_layers : int
-        Number of layers.
-    output_activation : str
-        Activation function for output layer.
-    linear_cfg : LinearConfig
-        Linear layer configuration.
-
-    """
-
-    hidden_dim: int
-    n_layers: int
-    output_activation: str
-    linear_cfg: LinearConfig
-
-
-@dataclass
 class LinearConfig:
     """
     A linear layer configuration.
@@ -197,6 +179,30 @@ class LinearConfig:
     dropout: float = 0.0
     norm_first: bool = False
     bias: bool = True
+
+
+@dataclass
+class MLPConfig:
+    """
+    Multi-layer perceptron configuration.
+
+    Attributes
+    ----------
+    hidden_dim : int
+        Number of hidden units.
+    n_layers : int
+        Number of layers.
+    output_activation : str
+        Activation function for output layer.
+    linear_cfg : LinearConfig
+        Linear layer configuration.
+
+    """
+
+    hidden_dim: int
+    n_layers: int
+    output_activation: str
+    linear_cfg: LinearConfig
 
 
 @dataclass

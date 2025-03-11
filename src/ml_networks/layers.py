@@ -1,10 +1,9 @@
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
-from omegaconf import DictConfig
 from torch import nn
 from torchgeometry.contrib import spatial_soft_argmax2d
 
@@ -12,7 +11,10 @@ from ml_networks.activations import Activation
 from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
 
 
-def get_norm(norm: Literal["layer", "rms", "group", "batch", "none"], **kwargs) -> nn.Module:
+def get_norm(
+    norm: Literal["layer", "rms", "group", "batch", "none"],
+    **kwargs: Any,
+) -> nn.Module:
     """
     Get normalization layer.
 
@@ -397,29 +399,30 @@ class ConvNormActivation(nn.Module):
         bias: bool = cfg.bias
         dropout: float = cfg.dropout
         norm: Literal["batch", "group", "none"] = cfg.norm
-        norm_cfg: DictConfig = cfg.norm_cfg
+        norm_cfg = cfg.norm_cfg
         scale_factor: int = cfg.scale_factor
-        _out_channels = out_channels
+
+        out_channels_ = out_channels
         if "glu" in activation.lower():
-            _out_channels *= 2
+            out_channels_ *= 2
         if scale_factor > 0:
-            _out_channels *= abs(scale_factor) ** 2
+            out_channels_ *= abs(scale_factor) ** 2
         elif scale_factor < 0:
-            _out_channels //= abs(scale_factor) ** 2
+            out_channels_ //= abs(scale_factor) ** 2
         self.conv = nn.Conv2d(
-            in_channels,
-            _out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
+            in_channels=in_channels,
+            out_channels=out_channels_,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
             bias=bias,
         )
         if norm != "none" and norm != "group":
-            norm_cfg["num_features"] = _out_channels
+            norm_cfg["num_features"] = out_channels_
         elif norm == "group":
-            norm_cfg["num_channels"] = _out_channels
+            norm_cfg["num_channels"] = out_channels_
 
         self.norm = get_norm(norm, **norm_cfg)
         if scale_factor > 0:
@@ -492,10 +495,10 @@ class ResidualBlock(nn.Module):
         kernel_size: int,
         activation: str = "ReLU",
         norm: Literal["batch", "group", "none"] = "none",
-        norm_cfg: DictConfig = DictConfig({}),
+        norm_cfg: dict[str, Any] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        super(ResidualBlock, self).__init__()
+        super().__init__()
         first_cfg = ConvConfig(
             activation=activation,
             kernel_size=kernel_size,
@@ -506,7 +509,7 @@ class ResidualBlock(nn.Module):
             bias=True,
             dropout=dropout,
             norm=norm,
-            norm_cfg=norm_cfg,
+            norm_cfg=norm_cfg or {},
         )
         second_cfg = ConvConfig(
             activation="Identity",
@@ -518,7 +521,7 @@ class ResidualBlock(nn.Module):
             bias=True,
             dropout=dropout,
             norm=norm,
-            norm_cfg=norm_cfg,
+            norm_cfg=norm_cfg or {},
         )
         self.conv_block = nn.Sequential(
             ConvNormActivation(
@@ -872,17 +875,17 @@ class PatchEmbed(nn.Module):
             Output tensor of shape (B, Np, D)
 
         Np is the number of patches.
-            Np = H*W/Pˆ2
+            Np = H*W/P^2
         D is the embedding dimension.
 
         """
-        # パッチの埋め込み & flatten [式(3)]
+        # パッチの埋め込み && flatten[式(3)]
         # パッチの埋め込み (B, C, H, W) -> (B, D, H/P, W/P)
         # ここで、Pはパッチ1辺の大きさ
         x = self.patch_emb_layer(x)
 
         # パッチのflatten (B, D, H/P, W/P) -> (B, D, Np)
-        # ここで、Np はパッチの数( = H*W/Pˆ2)
+        # ここで、Np はパッチの数( = H*W/P^2)
         x = x.flatten(2)
 
         # 軸の入れ替え (B, D, Np) -> (B, Np, D)
@@ -921,11 +924,17 @@ class SpatialSoftmaxFlatten(nn.Module):
 
     def spatial_softmax_expectation2d(self, x: torch.Tensor) -> torch.Tensor:
         """
-        引数:
-            x: 入力特徴量。形状は、(B, N, H, W)
-                B: バッチサイズ、N: トークン数、H: 高さ、W: 幅
-        返り値:
-            x: Spatial Softmaxを適用した特徴量。形状は、(B, N, H, W)。
+        Spatial Softmax and Expectation layer.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            入力特徴量。形状は、(B, N, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, H, W)。
         """
         x = spatial_softmax2d(x, self.temperature)
         return spatial_expectation2d(x)

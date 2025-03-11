@@ -1,5 +1,3 @@
-# ruff: noqa: ARG002
-
 from collections.abc import Iterable
 
 import pytorch_lightning as pl
@@ -36,6 +34,14 @@ class ProgressBarCallback(RichProgressBar):
 
 
 class SwitchOptimizer(pl.Callback):
+    """
+    `ScheduleFree`系 Optimizer を使うための Callback.
+
+    References
+    ----------
+    - https://github.com/facebookresearch/schedule_free
+    """
+
     def on_before_optimizer_step(
         self,
         trainer: pl.Trainer,
@@ -43,11 +49,11 @@ class SwitchOptimizer(pl.Callback):
         optimizer: torch.optim.Optimizer,
         opt_idx: int = 0,
     ) -> None:
-        optimizer = pl_module.optimizers()
-        if isinstance(optimizer, ScheduleFreeOptimizers):
-            optimizer.train()
-        elif isinstance(optimizer, Iterable):
-            for opt in optimizer:
+        optimizer_ = pl_module.optimizers()
+        if isinstance(optimizer_, ScheduleFreeOptimizers):
+            optimizer_.train()
+        elif isinstance(optimizer_, Iterable):
+            for opt in optimizer_:
                 if isinstance(opt, ScheduleFreeOptimizers):
                     opt.train()
 
