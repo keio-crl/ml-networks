@@ -8,7 +8,16 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
+import blosc2
 
+def save_blosc2(path: str, x: np.ndarray) -> None:
+    with open(path, "wb") as f:
+        f.write(blosc2.pack_array2(x))
+
+
+def load_blosc2(path: str) -> np.ndarray:
+    with open(path, "rb") as f:
+        return blosc2.unpack_array2(f.read())
 
 def conv_out(h_in: int, padding: int, kernel_size: int, stride: int, dilation: int = 1) -> int:
     """
