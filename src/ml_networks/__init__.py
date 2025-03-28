@@ -10,6 +10,8 @@ from ml_networks.config import (
     SpatialSoftmaxConfig,
     TransformerConfig,
     ViTConfig,
+    EncoderConfig,
+    DecoderConfig,
 )
 from ml_networks.utils import (determine_loader, get_optimizer, 
                                gumbel_softmax, seed_worker, 
@@ -81,5 +83,7 @@ __all__ = [
     "PatchEmbed",
     "SpatialSoftmaxFlatten",
     "get_norm",
+    "EncoderConfig",
+    "DecoderConfig",
 ]
 

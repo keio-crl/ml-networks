@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
@@ -14,6 +14,7 @@ def load_config(path: str) -> DictConfig | ListConfig:
     DictConfig
     """
     return OmegaConf.load(Path(path))
+
 
 
 @dataclass
@@ -275,3 +276,37 @@ class SpatialSoftmaxConfig:
     """
 
     temperature: float = 0.0
+
+@dataclass 
+class EncoderConfig:
+    """
+    Encoder configuration.
+
+    Attributes
+    ----------
+    backbone: Union[ConvNetConfig, ResNetConfig]
+        Backbone configuration.
+    full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
+        Full connection configuration.
+    """
+
+    backbone: Union[ConvNetConfig, ResNetConfig]
+    full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
+
+@dataclass
+class DecoderConfig:
+    """
+    Decoder configuration.
+
+    Attributes
+    ----------
+    backbone: Union[ConvNetConfig, ResNetConfig]
+        Backbone configuration.
+    full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
+        Full connection configuration.
+    """
+    
+    backbone: Union[ConvNetConfig, ResNetConfig]
+    full_connection: Union[MLPConfig, LinearConfig]
+
+
