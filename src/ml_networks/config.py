@@ -125,7 +125,9 @@ class ConvNetConfig:
         conv_cfgs = []
         for conv_cfg in self.conv_cfgs:
             if isinstance(conv_cfg, DictConfig):
-                conv_cfgs.append(dict(conv_cfg))
+                conv_cfg = ConvConfig(**conv_cfg)
+            conv_cfg.dictcfg2dict()
+            conv_cfgs.append(conv_cfg)
 
 
 @dataclass
