@@ -15,6 +15,15 @@ def load_config(path: str) -> DictConfig | ListConfig:
     """
     return OmegaConf.load(Path(path))
 
+def convert_dictconfig_to_dict(obj):
+    """Recursively convert DictConfig to dict in any iterable object."""
+    if isinstance(obj, DictConfig):
+        return dict(obj)
+    elif isinstance(obj, (list, tuple)):
+        return type(obj)(convert_dictconfig_to_dict(item) for item in obj)
+    elif isinstance(obj, dict):
+        return {k: convert_dictconfig_to_dict(v) for k, v in obj.items()}
+    return obj
 
 
 @dataclass
@@ -86,6 +95,15 @@ class ConvConfig:
         """
         self.norm_cfg = dict(self.norm_cfg)
 
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+        
+
 
 @dataclass
 class ConvNetConfig:
@@ -128,6 +146,14 @@ class ConvNetConfig:
                 conv_cfg = ConvConfig(**conv_cfg)
             conv_cfg.dictcfg2dict()
             conv_cfgs.append(conv_cfg)
+        self.conv_cfgs = tuple(conv_cfgs)
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 
 @dataclass
@@ -197,6 +223,13 @@ class ResNetConfig:
             Dictionary representation of ResNetConfig.
         """
         self.norm_cfg = dict(self.norm_cfg)
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 @dataclass
 class LinearConfig:
@@ -243,6 +276,13 @@ class LinearConfig:
             Dictionary representation of LinearConfig.
         """
         self.norm_cfg = dict(self.norm_cfg)
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 @dataclass
 class MLPConfig:
@@ -266,6 +306,24 @@ class MLPConfig:
     n_layers: int
     output_activation: str
     linear_cfg: LinearConfig
+
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `MLPConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of MLPConfig.
+        """
+        self.linear_cfg.dictcfg2dict()
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 
 @dataclass
@@ -355,6 +413,27 @@ class EncoderConfig:
     backbone: Union[ConvNetConfig, ResNetConfig]
     full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
 
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `EncoderConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of EncoderConfig.
+        """
+        self.backbone.dictcfg2dict()
+        if hasattr(self.full_connection, "dictcfg2dict"):
+            self.full_connection.dictcfg2dict()
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+
+
 @dataclass
 class DecoderConfig:
     """
@@ -370,5 +449,24 @@ class DecoderConfig:
     
     backbone: Union[ConvNetConfig, ResNetConfig]
     full_connection: Union[MLPConfig, LinearConfig]
+
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `DecoderConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of DecoderConfig.
+        """
+        self.backbone.dictcfg2dict()
+        self.full_connection.dictcfg2dict()
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, ListConfig):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+            elif isinstance(value, (list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 
