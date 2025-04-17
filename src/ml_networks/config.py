@@ -75,6 +75,17 @@ class ConvConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `ConvConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of ConvConfig.
+        """
+        self.norm_cfg = dict(self.norm_cfg)
+
 
 @dataclass
 class ConvNetConfig:
@@ -159,6 +170,16 @@ class ResNetConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `ResNetConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of ResNetConfig.
+        """
+        self.norm_cfg = dict(self.norm_cfg)
 
 @dataclass
 class LinearConfig:
@@ -194,6 +215,17 @@ class LinearConfig:
             self.norm_cfg = {}
         else:
             self.norm_cfg = dict(**self.norm_cfg)
+
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `LinearConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of LinearConfig.
+        """
+        self.norm_cfg = dict(self.norm_cfg)
 
 @dataclass
 class MLPConfig:
