@@ -184,7 +184,7 @@ class Encoder(pl.LightningModule):
 
         x = x.reshape([-1, *self.obs_shape])
         x = self.encoder(x)
-        x = x.view(-1, self.conved_size)
+        x = x.view(-1, self.last_channel, *self.conved_shape)
         x = self.fc(x)
         return x.reshape([*batch_shape, *x.shape[1:]])
 
