@@ -10,6 +10,37 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 import blosc2
 import numpy as np
+from torchvision import transforms
+
+class MinMaxNormalize(transforms.Normalize):
+    def __init__(self, min: float, max: float, old_min: float = 0.0, old_max: float = 1.0) -> None:
+        """
+        MinMaxNormalizeの初期化.
+
+        Args:
+        -----
+        min : float
+            最小値.
+        max : float
+            最大値.
+        old_min : float
+            元の最小値.
+        old_max : float
+            元の最大値.
+
+
+        """
+        scale = (max - min) / (old_max - old_min)
+        shift = min - old_min * scale          # new = scale·x + shift
+
+        #   Normalize does (x − mean)/std  ⇒  x · (1/std)  − mean/std
+        mean = -shift / scale                      # invert the affine form
+        std  = 1.0 / scale
+
+        super().__init__(mean=[mean]*3, std=[std]*3)
+        self.min = min
+        self.max = max
+
 
 
 def save_blosc2(path: str, x: np.ndarray) -> None:
