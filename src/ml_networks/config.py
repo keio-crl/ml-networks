@@ -152,6 +152,13 @@ class ResNetConfig:
     dropout: float = 0.0
     init_channel: int = 16
 
+    def __post_init__(self) -> None:
+        """Set `norm_cfg`."""
+        if self.norm == "none":
+            self.norm_cfg = {}
+        else:
+            self.norm_cfg = dict(**self.norm_cfg)
+
 
 @dataclass
 class LinearConfig:
@@ -181,6 +188,12 @@ class LinearConfig:
     norm_first: bool = False
     bias: bool = True
 
+    def __post_init__(self) -> None:
+        """Set `norm_cfg`."""
+        if self.norm == "none":
+            self.norm_cfg = {}
+        else:
+            self.norm_cfg = dict(**self.norm_cfg)
 
 @dataclass
 class MLPConfig:
