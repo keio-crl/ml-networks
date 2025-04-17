@@ -112,6 +112,20 @@ class ConvNetConfig:
         self.conv_cfgs = tuple(self.conv_cfgs)
         self.channels = tuple(self.channels)
 
+    def dictcfg2dict(self):
+        """
+        Convert DictConfig to dict for `ConvNetConfig`.
+
+        Returns
+        -------
+        dict
+            Dictionary representation of ConvNetConfig.
+        """
+        self.channels = tuple(self.channels)
+        self.conv_cfgs = tuple(self.conv_cfgs)
+        for conv_cfg in self.conv_cfgs:
+            conv_cfg.dictcfg2dict()
+
 
 @dataclass
 class ResNetConfig:
