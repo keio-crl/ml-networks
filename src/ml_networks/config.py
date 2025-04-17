@@ -122,9 +122,10 @@ class ConvNetConfig:
             Dictionary representation of ConvNetConfig.
         """
         self.channels = tuple(self.channels)
-        self.conv_cfgs = tuple(self.conv_cfgs)
+        conv_cfgs = []
         for conv_cfg in self.conv_cfgs:
-            conv_cfg.dictcfg2dict()
+            if isinstance(conv_cfg, DictConfig):
+                conv_cfgs.append(dict(conv_cfg))
 
 
 @dataclass
