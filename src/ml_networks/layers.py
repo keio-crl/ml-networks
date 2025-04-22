@@ -904,11 +904,11 @@ class SpatialSoftmax(nn.Module):
     Examples
     --------
     >>> cfg = SpatialSoftmaxConfig(temperature=1.0)
-    >>> spatial_softmax_flatten = SpatialSoftmaxFlatten(cfg)
+    >>> spatial_softmax = SpatialSoftmax(cfg)
     >>> x = torch.randn(1, 64, 16, 16)
-    >>> output = spatial_softmax_flatten(x)
+    >>> output = spatial_softmax(x)
     >>> output.shape
-    torch.Size([1, 128])
+    torch.Size([1, 64, 2])
 
     """
 
