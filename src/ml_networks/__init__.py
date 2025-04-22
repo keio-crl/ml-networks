@@ -28,7 +28,7 @@ from ml_networks.loss import (FocalFrequencyLoss, focal_loss, binary_focal_loss,
 from ml_networks.layers import (LinearNormActivation, MLPLayer, TransformerLayer,
                                 ConvNormActivation, ConvTransposeNormActivation,
                                 ResidualBlock, PositionalEncoding, PatchEmbed,
-                                SpatialSoftmaxFlatten, get_norm)
+                                SpatialSoftmax, get_norm)
 __all__ = [
     "MinMaxNormalize",
     "Activation",
@@ -83,7 +83,7 @@ __all__ = [
     "ResidualBlock",
     "PositionalEncoding",
     "PatchEmbed",
-    "SpatialSoftmaxFlatten",
+    "SpatialSoftmax",
     "get_norm",
     "EncoderConfig",
     "DecoderConfig",

@@ -21,7 +21,7 @@ from ml_networks.layers import (
     PatchEmbed,
     PositionalEncoding,
     ResidualBlock,
-    SpatialSoftmaxFlatten,
+    SpatialSoftmax,
     TransformerLayer,
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_transpose_out_shape
@@ -160,7 +160,8 @@ class Encoder(pl.LightningModule):
             )
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
             self.fc = nn.Sequential(
-                SpatialSoftmaxFlatten(fc_cfg),
+                SpatialSoftmax(fc_cfg),
+                nn.Flatten(),
             )
             self.feature_dim = self.last_channel * 2
         else:
