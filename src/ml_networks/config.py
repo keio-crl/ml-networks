@@ -395,7 +395,9 @@ class SpatialSoftmaxConfig:
         Default is 0.0.
     """
 
-    temperature: float = 0.0
+    temperature: float = 1.0
+    eps: float = 1e-6
+    is_argmax: bool = False
 
 @dataclass 
 class EncoderConfig:
