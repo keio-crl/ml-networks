@@ -3,9 +3,9 @@ from typing import Any, Literal
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from kornia.geometry.subpix import spatial_expectation2d, spatial_softmax2d
+import torch.nn.functional as F
 from torch import nn
-from torchgeometry.contrib import spatial_soft_argmax2d
+from torchgeometry.contrib.spatial_soft_argmax2d import create_meshgrid, spatial_soft_argmax2d
 
 from ml_networks.activations import Activation
 from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
@@ -892,7 +892,7 @@ class PatchEmbed(nn.Module):
         return x.transpose(1, 2)
 
 
-class SpatialSoftmaxFlatten(nn.Module):
+class SpatialSoftmax(nn.Module):
     """
     Spatial Softmax and Flatten layer.
 
@@ -914,17 +914,17 @@ class SpatialSoftmaxFlatten(nn.Module):
 
     def __init__(self, cfg: SpatialSoftmaxConfig) -> None:
         super().__init__()
-        temperature = cfg.temperature
-        assert temperature >= 0.0, "temperature must be non-negative"
-        if temperature > 0.0:
-            self.spatial_softmax = spatial_soft_argmax2d
+        self.temperature = cfg.temperature
+        self.eps = cfg.eps
+        assert self.temperature > 0.0, "temperature must be non-negative"
+        if cfg.is_argmax:
+            self.spatial_softmax = self.spatial_argmax2d
         else:
-            self.spatial_softmax = self.spatial_softmax_expectation2d
-        self.register_buffer("temperature", torch.tensor(temperature).float())
+            self.spatial_softmax = spatial_soft_argmax2d
 
-    def spatial_softmax_expectation2d(self, x: torch.Tensor) -> torch.Tensor:
+    def spatial_argmax2d(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Spatial Softmax and Expectation layer.
+        Spatial Softmax and Argmax layer.
 
         Parameters
         ----------
@@ -934,10 +934,41 @@ class SpatialSoftmaxFlatten(nn.Module):
         Returns
         -------
         torch.Tensor
-            Spatial Softmaxを適用した特徴量。形状は、(B, N, H, W)。
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, 2)。
         """
-        x = spatial_softmax2d(x, self.temperature)
-        return spatial_expectation2d(x)
+        if not torch.is_tensor(x):
+            raise TypeError("Input input type is not a torch.Tensor. Got {}"
+                            .format(type(input)))
+        if not len(x.shape) == 4:
+            raise ValueError("Invalid input shape, we expect BxCxHxW. Got: {}"
+                             .format(x.shape))
+        # unpack shapes and create view from input tensor
+        batch_size, channels, height, width = x.shape
+        x = x.view(batch_size, channels, -1)
+
+        # compute softmax with max substraction trick
+        exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
+        exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
+        softmax_x = exp_x * exp_x_sum
+
+        # straight-through trick
+        argmax_x = torch.argmax(x, dim=-1, keepdim=True)
+        argmax_x = F.one_hot(argmax_x, num_classes=x.shape[-1])
+        argmax_x = argmax_x + softmax_x - softmax_x.detach()
+
+        # create coordinates grid
+        pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
+        pos_x = pos_x.reshape(-1)
+        pos_y = pos_y.reshape(-1)
+
+        # compute the expected coordinates
+        expected_y = torch.sum(
+            pos_y * argmax_x, dim=-1, keepdim=True)
+        expected_x = torch.sum(
+            pos_x * argmax_x, dim=-1, keepdim=True)
+        output = torch.cat([expected_x, expected_y], dim=-1)
+        return output.view(batch_size, channels, 2)  # BxNx2
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -952,8 +983,8 @@ class SpatialSoftmaxFlatten(nn.Module):
         -------
             Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
         """
-        x = self.spatial_softmax(x)
-        return x.flatten(1)
+        x = self.spatial_softmax(x/self.temperature)
+        return x
 
 
 if __name__ == "__main__":
