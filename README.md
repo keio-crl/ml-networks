@@ -155,6 +155,13 @@ full_connection_cfg = LinearConfig(
     bias=True,
 )
 
+# SpatialSoftmaxを使う場合は以下のように設定する
+full_connection_cfg = SpatialSoftmaxConfig(
+    temprature=1.0, # 温度パラメータ．Default: 1.0
+    eps=1e-6, # 0に近い値を指定するとエラーになるので注意．Default: 1e-6
+    is_argmax=False, # argmaxを使うかどうか．Default: False
+)
+
 # 特徴マップをそのまま出力する場合は以下のように設定する
 full_connection_cfg = None
 
@@ -176,6 +183,18 @@ z = encoder(obs)
 print(z.shape)
 >>> torch.Size([32, 64])
 
+
+# 独立にspatial softmaxを使う場合
+from ml_networks import SpatialSoftmaxConfig, SpatialSoftmax
+
+data = torch.randn(32, 3, 64, 64)
+cfg = SpatialSoftmaxConfig(
+    temprature=1.0, # 温度パラメータ．Default: 1.0
+    eps=1e-6, # 0に近い値を指定するとエラーになるので注意．Default: 1e-6
+    is_argmax=False, # argmaxを使うかどうか．Default: False
+)
+spatial_softmax = SpatialSoftmax(cfg)
+z = spatial_softmax(data)
 
 ```
 
