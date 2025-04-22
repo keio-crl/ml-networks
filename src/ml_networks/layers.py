@@ -903,7 +903,7 @@ class SpatialSoftmax(nn.Module):
 
     Examples
     --------
-    >>> cfg = SpatialSoftmaxConfig(temperature=1.0)
+    >>> cfg = SpatialSoftmaxConfig(temperature=1.0, is_argmax=True)
     >>> spatial_softmax = SpatialSoftmax(cfg)
     >>> x = torch.randn(1, 64, 16, 16)
     >>> output = spatial_softmax(x)
@@ -944,6 +944,7 @@ class SpatialSoftmax(nn.Module):
                              .format(x.shape))
         # unpack shapes and create view from input tensor
         batch_size, channels, height, width = x.shape
+        pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         x = x.view(batch_size, channels, -1)
 
         # compute softmax with max substraction trick
@@ -953,11 +954,10 @@ class SpatialSoftmax(nn.Module):
 
         # straight-through trick
         argmax_x = torch.argmax(x, dim=-1, keepdim=True)
-        argmax_x = F.one_hot(argmax_x, num_classes=x.shape[-1])
+        argmax_x = F.one_hot(argmax_x, num_classes=x.shape[-1]).squeeze(2)
         argmax_x = argmax_x + softmax_x - softmax_x.detach()
 
         # create coordinates grid
-        pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         pos_x = pos_x.reshape(-1)
         pos_y = pos_y.reshape(-1)
 
