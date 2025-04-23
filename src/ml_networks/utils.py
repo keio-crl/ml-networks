@@ -615,7 +615,7 @@ def torch_fix_seed(seed: int = 42) -> None:
     - https://qiita.com/north_redwing/items/1e153139125d37829d2d
     """
     random.seed(seed)
-    pl.seed_everything(seed)
+    pl.seed_everything(seed, workers=True)
     torch.set_float32_matmul_precision("medium")
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
