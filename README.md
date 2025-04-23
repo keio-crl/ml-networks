@@ -16,7 +16,7 @@ rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
 ```
 
 ```bash
-uv add "ml-networks git+https://<access token>@github.com/keio-crl/ml-networks.git"
+uv add "git+https://<access token>@github.com/keio-crl/ml-networks.git"
 ```
 
 install時はアカウント名とパスワードが求められる場合があります．  
