@@ -398,6 +398,7 @@ class SpatialSoftmaxConfig:
     temperature: float = 1.0
     eps: float = 1e-6
     is_argmax: bool = False
+    is_straight_through: bool = False
 
 @dataclass 
 class EncoderConfig:

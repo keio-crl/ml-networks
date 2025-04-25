@@ -919,8 +919,56 @@ class SpatialSoftmax(nn.Module):
         assert self.temperature > 0.0, "temperature must be non-negative"
         if cfg.is_argmax:
             self.spatial_softmax = self.spatial_argmax2d
+        elif cfg.is_straight_through:
+            self.spatial_softmax = self.spatial_softmax_straight_through
         else:
             self.spatial_softmax = spatial_soft_argmax2d
+
+    def spatial_softmax_straight_through(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Spatial Softmax and Argmax layer.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            入力特徴量。形状は、(B, N, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, 2)。
+        """
+        if not torch.is_tensor(x):
+            raise TypeError("Input input type is not a torch.Tensor. Got {}"
+                            .format(type(input)))
+        if not len(x.shape) == 4:
+            raise ValueError("Invalid input shape, we expect BxCxHxW. Got: {}"
+                             .format(x.shape))
+        # unpack shapes and create view from input tensor
+        batch_size, channels, height, width = x.shape
+        pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
+        x = x.view(batch_size, channels, -1)
+
+        # compute softmax with max substraction trick
+        exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
+        exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
+        softmax_x = exp_x * exp_x_sum
+
+        # straight-through trick
+        softmax_x = softmax_x + x - x.detach()
+
+        # create coordinates grid
+        pos_x = pos_x.reshape(-1)
+        pos_y = pos_y.reshape(-1)
+
+        # compute the expected coordinates
+        expected_y = torch.sum(
+            pos_y * softmax_x, dim=-1, keepdim=True)
+        expected_x = torch.sum(
+            pos_x * softmax_x, dim=-1, keepdim=True)
+        output = torch.cat([expected_x, expected_y], dim=-1)
+        return output.view(batch_size, channels, 2)  # BxNx2
+
 
     def spatial_argmax2d(self, x: torch.Tensor) -> torch.Tensor:
         """
