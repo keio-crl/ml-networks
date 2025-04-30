@@ -699,7 +699,7 @@ class SoftmaxTransformation:
             data = x
 
         negative = torch.stack(
-            [torch.exp((-(data+self.k[v])**2)/self.sigma) for v in range(self.vector)])
+            [torch.exp((-(data-self.k[v])**2)/self.sigma) for v in range(self.vector)])
         negative_sum = negative.sum(dim=0)
         
         transformed = negative/(negative_sum+1e-8)
