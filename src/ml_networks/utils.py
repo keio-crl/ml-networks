@@ -744,7 +744,7 @@ class SoftmaxTransformation:
             data = torch.cat([data, ignored], dim=-1)
         else:
             data = data
-        return data.reshape(*batch, dim)
+        return data.reshape(*batch, -1)
 
 if __name__ == "__main__":
     import doctest
