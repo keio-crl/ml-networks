@@ -25,6 +25,28 @@ def convert_dictconfig_to_dict(obj):
         return {k: convert_dictconfig_to_dict(v) for k, v in obj.items()}
     return obj
 
+@dataclass
+class SoftmaxTransConfig:
+    """
+    Softmax transformation configuration.
+    Attributes
+    ----------
+    vector : int
+        Vector size.
+    sigma : float
+        Sigma value.
+    n_ignore : int
+        Number of ignored elements. Default is 0.
+    max : float
+        Maximum value. Default is 1.0.
+    min : float
+        Minimum value. Default is -1.0.
+    """
+    vector: int
+    sigma: float
+    n_ignore: int = 0
+    max: float = 1.0
+    min: float = -1.0
 
 @dataclass
 class ConvConfig:
@@ -471,5 +493,4 @@ class DecoderConfig:
                 setattr(self, key, convert_dictconfig_to_dict(value))
             elif isinstance(value, (list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
-
 
