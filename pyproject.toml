@@ -12,6 +12,7 @@ dependencies = [
     "blosc2>=2.4.0",
     "einops>=0.8.1",
     "kornia>=0.7.3",
+    "natsort>=8.4.0",
     "numpy>=2.1",
     "omegaconf>=2.3.0",
     "pytorch-lightning>=2.4.0",
