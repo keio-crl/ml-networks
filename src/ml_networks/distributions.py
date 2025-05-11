@@ -469,6 +469,7 @@ class Distribution(nn.Module):
         self.dist = dist
         self.spherical = spherical
         self.n_class = in_dim // n_groups
+        print(f"n_class: {self.n_class}")
         self.in_dim = in_dim
         self.n_groups = n_groups
 
