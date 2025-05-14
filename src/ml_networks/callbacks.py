@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import Iterable
 
 import pytorch_lightning as pl
