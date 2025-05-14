@@ -4,10 +4,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-from pytorch_optimizer import ScheduleFreeAdamW, ScheduleFreeRAdam, ScheduleFreeSGD
-from schedulefree import RAdamScheduleFree, SGDScheduleFree
 
-ScheduleFreeOptimizers = RAdamScheduleFree | SGDScheduleFree | ScheduleFreeSGD | ScheduleFreeRAdam | ScheduleFreeAdamW
 
 
 class ProgressBarCallback(RichProgressBar):
@@ -33,65 +30,3 @@ class ProgressBarCallback(RichProgressBar):
         super().__init__(theme=theme)
 
 
-class SwitchOptimizer(pl.Callback):
-    """
-    `ScheduleFree`系 Optimizer を使うための Callback.
-
-    References
-    ----------
-    - https://github.com/facebookresearch/schedule_free
-    """
-
-    def on_before_optimizer_step(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-        optimizer: torch.optim.Optimizer,
-        opt_idx: int = 0,
-    ) -> None:
-        optimizer_ = pl_module.optimizers()
-        if isinstance(optimizer_, ScheduleFreeOptimizers):
-            optimizer_.train()
-        elif isinstance(optimizer_, Iterable):
-            for opt in optimizer_:
-                if isinstance(opt, ScheduleFreeOptimizers):
-                    opt.train()
-
-    def on_train_epoch_start(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-    ) -> None:
-        optimizer = pl_module.optimizers()
-        if isinstance(optimizer, ScheduleFreeOptimizers):
-            optimizer.train()
-        elif isinstance(optimizer, Iterable):
-            for opt in optimizer:
-                if isinstance(opt, ScheduleFreeOptimizers):
-                    opt.train()
-
-    def on_validation_start(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-    ) -> None:
-        optimizer = pl_module.optimizers()
-        if isinstance(optimizer, ScheduleFreeOptimizers):
-            optimizer.eval()
-        elif isinstance(optimizer, Iterable):
-            for opt in optimizer:
-                if isinstance(opt, ScheduleFreeOptimizers):
-                    opt.eval()
-
-    def on_validation_end(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-    ) -> None:
-        optimizer = pl_module.optimizers()
-        if isinstance(optimizer, ScheduleFreeOptimizers):
-            optimizer.eval()
-        elif isinstance(optimizer, Iterable):
-            for opt in optimizer:
-                if isinstance(opt, ScheduleFreeOptimizers):
-                    opt.eval()
