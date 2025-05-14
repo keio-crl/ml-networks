@@ -1,6 +1,6 @@
 
 from ml_networks.activations import Activation, CRReLU, REReLU, SiGLU, TanhExp
-from ml_networks.callbacks import ProgressBarCallback, SwitchOptimizer
+from ml_networks.callbacks import ProgressBarCallback 
 from ml_networks.config import (
     ConvConfig,
     ConvNetConfig,
@@ -49,7 +49,6 @@ __all__ = [
     "ResNetPixUnshuffle",
     "SiGLU",
     "SpatialSoftmaxConfig",
-    "SwitchOptimizer",
     "TanhExp",
     "TransformerConfig",
     "ViT",
