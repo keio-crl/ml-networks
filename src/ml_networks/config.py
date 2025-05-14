@@ -5,7 +5,7 @@ from typing import Any, Literal, Union
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
-def load_config(path: str) -> DictConfig | ListConfig:
+def load_config(path: str) -> Union[DictConfig, ListConfig]:
     """
     Convert model config `.yaml` to `Dictconfig` with custom resolvers.
 
