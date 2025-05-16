@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
@@ -97,7 +97,7 @@ class ConvConfig:
     bias: bool = True
     dropout: float = 0.0
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: dict[str, Any] = field(default_factory=dict)
+    norm_cfg: Dict[str, Any] = field(default_factory=dict)
     scale_factor: int = 0
 
     def __post_init__(self) -> None:
@@ -144,8 +144,8 @@ class ConvNetConfig:
         Initial number of channels, especially for transposed convolution.
     """
 
-    channels: tuple[int, ...]
-    conv_cfgs: tuple[ConvConfig, ...]
+    channels: Tuple[int, ...]
+    conv_cfgs: Tuple[ConvConfig, ...]
     init_channel: int = 16
 
     def __post_init__(self) -> None:
@@ -225,7 +225,7 @@ class ResNetConfig:
     scale_factor: int = 2
     n_scaling: int = 2
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: dict[str, Any] = field(default_factory=dict)
+    norm_cfg: Dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     init_channel: int = 16
 
@@ -277,7 +277,7 @@ class LinearConfig:
 
     activation: str
     norm: Literal["layer", "rms", "none"] = "none"
-    norm_cfg: dict[str, Any] = field(default_factory=dict)
+    norm_cfg: Dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     norm_first: bool = False
     bias: bool = True
