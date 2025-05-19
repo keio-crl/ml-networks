@@ -1154,7 +1154,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "blosc2", specifier = "<=2.1.0" },
+    { name = "blosc2", specifier = ">=2.1.0" },
     { name = "einops", specifier = ">=0.8.1" },
     { name = "kornia", specifier = ">=0.7.3" },
     { name = "natsort", specifier = ">=8.4.0" },
