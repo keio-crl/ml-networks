@@ -423,7 +423,7 @@ class ConvNormActivation(nn.Module):
         if norm != "none" and norm != "group":
             norm_cfg["num_features"] = out_channels_
         elif norm == "group":
-            norm_cfg["num_channels"] = out_channels_
+            norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
         self.norm = get_norm(norm, **norm_cfg)
         if scale_factor > 0:
