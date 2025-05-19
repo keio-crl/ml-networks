@@ -434,6 +434,7 @@ class ConvNormActivation(nn.Module):
             self.pixel_shuffle = nn.Identity()
         self.activation = Activation(activation, dim=-3)
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+        self.norm_first = cfg.norm_first
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -455,11 +456,19 @@ class ConvNormActivation(nn.Module):
         W' = W' * scale_factor if scale_factor > 0 else W' // abs(scale_factor) if scale_factor < 0 else W'
 
         """
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.pixel_shuffle(x)
-        x = self.activation(x)
-        return self.dropout(x)
+        if self.norm_first:
+            x = self.norm(x)
+            x = self.conv(x)
+            x = self.pixel_shuffle(x)
+            x = self.activation(x)
+            x = self.dropout(x)
+        else:
+            x = self.conv(x)
+            x = self.norm(x)
+            x = self.pixel_shuffle(x)
+            x = self.activation(x)
+            x = self.dropout(x)
+        return x
 
 
 class ResidualBlock(nn.Module):

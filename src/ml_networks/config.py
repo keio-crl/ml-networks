@@ -98,6 +98,7 @@ class ConvConfig:
     dropout: float = 0.0
     norm: Literal["batch", "group", "none"] = "none"
     norm_cfg: Dict[str, Any] = field(default_factory=dict)
+    norm_first: bool = False
     scale_factor: int = 0
 
     def __post_init__(self) -> None:
