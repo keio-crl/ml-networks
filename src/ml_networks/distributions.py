@@ -86,6 +86,47 @@ class NormalStoch:
             return method
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
+    def unsqueeze(self, dim: int):
+        """
+        Unsqueeze the parameters of the normal distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to unsqueeze.
+
+        Returns
+        -------
+        NormalStoch
+            Unsqueezed normal distribution.
+
+        """
+        return NormalStoch(
+            self.mean.unsqueeze(dim),
+            self.std.unsqueeze(dim),
+            self.stoch.unsqueeze(dim)
+        )
+    def squeeze(self, dim: int):
+        """
+        Squeeze the parameters of the normal distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to squeeze.
+
+        Returns
+        -------
+        NormalStoch
+            Squeezed normal distribution.
+
+        """
+        return NormalStoch(
+            self.mean.squeeze(dim),
+            self.std.squeeze(dim),
+            self.stoch.squeeze(dim)
+        )
+
     def save(self, path: str):
         """
         Save the parameters of the normal distribution to the specified path.
@@ -156,6 +197,48 @@ class CategoricalStoch:
 
     def __len__(self):
         return self.stoch.shape[0]
+
+    def squeeze(self, dim: int):
+        """
+        Squeeze the parameters of the categorical distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to squeeze.
+
+        Returns
+        -------
+        CategoricalStoch
+            Squeezed categorical distribution.
+
+        """
+        return CategoricalStoch(
+            self.logits.squeeze(dim),
+            self.probs.squeeze(dim),
+            self.stoch.squeeze(dim)
+        )
+
+    def unsqueeze(self, dim: int):
+        """
+        Unsqueeze the parameters of the categorical distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to unsqueeze.
+
+        Returns
+        -------
+        CategoricalStoch
+            Unsqueezed categorical distribution.
+
+        """
+        return CategoricalStoch(
+            self.logits.unsqueeze(dim),
+            self.probs.unsqueeze(dim),
+            self.stoch.unsqueeze(dim)
+        )
 
     @property
     def shape(self):
@@ -267,6 +350,47 @@ class BernoulliStoch:
                 )
             return method
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+    def squeeze(self, dim: int):
+        """
+        Squeeze the parameters of the Bernoulli distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to squeeze.
+
+        Returns
+        -------
+        BernoulliStoch
+            Squeezed Bernoulli distribution.
+
+        """
+        return BernoulliStoch(
+            self.logits.squeeze(dim),
+            self.probs.squeeze(dim),
+            self.stoch.squeeze(dim)
+        )
+    def unsqueeze(self, dim: int):
+        """
+        Unsqueeze the parameters of the Bernoulli distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension to unsqueeze.
+
+        Returns
+        -------
+        BernoulliStoch
+            Unsqueezed Bernoulli distribution.
+
+        """
+        return BernoulliStoch(
+            self.logits.unsqueeze(dim),
+            self.probs.unsqueeze(dim),
+            self.stoch.unsqueeze(dim)
+        )
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
