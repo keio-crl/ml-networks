@@ -10,6 +10,20 @@ import torch.nn as nn
 from ml_networks.utils import save_blosc2, softmax
 from dataclasses import dataclass
 
+def get_dist(state: StochState) -> D.Independent:
+    if isinstance(state, NormalStoch):
+        dist = D.Normal(state.mean, state.std)
+        return D.Independent(dist, 1)
+    elif isinstance(state, CategoricalStoch):
+        dist = D.OneHotCategoricalStraightThrough(probs=state.probs)
+        return D.Independent(dist, 1)
+    elif isinstance(state, BernoulliStoch):
+        dist = BernoulliStraightThrough(probs=state.probs)
+        return D.Independent(dist, 2)
+    else:
+        raise NotImplementedError
+
+
 @dataclass
 class NormalShape:
     """
