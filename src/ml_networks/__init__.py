@@ -22,7 +22,7 @@ from ml_networks.utils import (determine_loader, get_optimizer,
 from ml_networks.vision import ConvNet, ConvTranspose, Decoder, Encoder, ResNetPixShuffle, ResNetPixUnshuffle, ViT
 from ml_networks.distributions import (Distribution, NormalStoch, 
                                        CategoricalStoch, BernoulliStoch, 
-                                       cat_dist, stack_dist, BSQCodebook, StochState)
+                                       cat_dist, stack_dist, BSQCodebook, StochState, get_dist)
 from ml_networks.loss import (FocalFrequencyLoss, focal_loss, binary_focal_loss,
                               kl_balancing, kl_divergence, charbonnier)
 
@@ -66,6 +66,7 @@ __all__ = [
     "CategoricalStoch",
     "BernoulliStoch",
     "StochState",
+    "get_dist",
     "cat_dist",
     "stack_dist",
     "BSQCodebook",
