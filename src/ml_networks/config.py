@@ -29,20 +29,10 @@ def convert_dictconfig_to_dict(obj):
 @dataclass
 class ContrastiveLearningConfig:
     dim_feature: int
-    dim_input1: int
     eval_func: MLPConfig
     dim_input2: Optional[int] = None
     cross_entropy_like: bool = False
 
-    def __post_init__(self) -> None:
-        """Set `dim_input2`."""
-        if self.dim_input2 is None:
-            self.dim_input2 = self.dim_input1
-
-        if self.dim_input1 != self.dim_input2:
-            self._shuld_diferrent_func = True
-        else:
-            self._shuld_diferrent_func = True
 
 
 @dataclass

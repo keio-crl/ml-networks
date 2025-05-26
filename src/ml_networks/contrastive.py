@@ -53,17 +53,22 @@ class ContrastiveLearningLoss(pl.LightningModule):
     (torch.Size([2, 128]), torch.Size([2, 128]))
     """
 
-    def __init__(self, cfg: ContrastiveLearningConfig) -> None:
+    def __init__(
+        self,
+        dim_input1: int,
+        dim_input2: int,
+        cfg: ContrastiveLearningConfig
+        ) -> None:
         super().__init__()
         self.cfg = cfg
         self.dim_feature = cfg.dim_feature
-        self.dim_input1 = cfg.dim_input1
-        self.dim_input2 = cfg.dim_input2
+        self.dim_input1 = dim_input1
+        self.dim_input2 = dim_input2
         self.is_ce_like = cfg.cross_entropy_like
 
-        self.eval_func = MLPLayer(cfg.dim_input1, cfg.dim_feature, cfg.eval_func)
+        self.eval_func = MLPLayer(dim_input1, cfg.dim_feature, cfg.eval_func)
         if self.dim_input1 != self.dim_input2:
-            self.eval_func2 = MLPLayer(cfg.dim_input2, cfg.dim_feature, cfg.eval_func)
+            self.eval_func2 = MLPLayer(dim_input2, cfg.dim_feature, cfg.eval_func)
         else:
             self.eval_func2 = self.eval_func
 
