@@ -426,6 +426,15 @@ class SpatialSoftmaxConfig:
         Softmax temperature. If it's set to 0.0, the layer outputs the coordinates of the maximum value.
         Otherwise, the layer outputs the expectation of the coordinates with softmax function.
         Default is 0.0.
+    eps : float
+        Epsilon value for numerical stability in softmax. Default is 1e-6.
+    is_argmax : bool
+        Whether to use argmax instead of softmax. Default is False.
+    is_straight_through : bool
+        Whether to use straight-through estimator for backpropagation. Default is False.
+    additional_layer : Optional[Union[MLPConfig, LinearConfig]]
+        Additional layer configuration. If it's set to None, no additional layer is applied.
+        Default is None.
     """
 
     temperature: float = 1.0
