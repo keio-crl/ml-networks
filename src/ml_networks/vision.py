@@ -164,8 +164,20 @@ class Encoder(pl.LightningModule):
             self.fc = nn.Sequential(
                 SpatialSoftmax(fc_cfg),
                 nn.Flatten(),
+                LinearNormActivation(
+                    self.last_channel * 2,
+                    self.feature_dim,
+                    fc_cfg.additional_layer
+                ) if isinstance(
+                        fc_cfg.additional_layer, LinearConfig
+                ) else MLPLayer(
+                    self.last_channel * 2,
+                    self.feature_dim,
+                    fc_cfg.additional_layer
+                ) if isinstance(
+                        fc_cfg.additional_layer, MLPConfig
+                ) else nn.Identity(),
             )
-            self.feature_dim = self.last_channel * 2
         else:
             self.fc = nn.Identity()
 

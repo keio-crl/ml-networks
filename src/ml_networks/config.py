@@ -432,6 +432,7 @@ class SpatialSoftmaxConfig:
     eps: float = 1e-6
     is_argmax: bool = False
     is_straight_through: bool = False
+    additional_layer: Optional[Union[MLPConfig, LinearConfig]] = None
 
 @dataclass 
 class EncoderConfig:
