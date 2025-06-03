@@ -104,6 +104,7 @@ class ConvConfig:
     dilation: int = 1
     groups: int = 1
     bias: bool = True
+    padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
     dropout: float = 0.0
     norm: Literal["batch", "group", "none"] = "none"
     norm_cfg: Dict[str, Any] = field(default_factory=dict)
@@ -238,6 +239,7 @@ class ResNetConfig:
     norm_cfg: Dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     init_channel: int = 16
+    padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
 
     def __post_init__(self) -> None:
         """Set `norm_cfg`."""

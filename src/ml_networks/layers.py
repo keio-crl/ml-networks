@@ -391,49 +391,39 @@ class ConvNormActivation(nn.Module):
         cfg: ConvConfig,
     ) -> None:
         super().__init__()
-        kernel_size: int = cfg.kernel_size
-        stride: int = cfg.stride
-        padding: int = cfg.padding
-        dilation: int = cfg.dilation
-        groups: int = cfg.groups
-        activation: str = cfg.activation
-        bias: bool = cfg.bias
-        dropout: float = cfg.dropout
-        norm: Literal["batch", "group", "none"] = cfg.norm
-        norm_cfg = cfg.norm_cfg
-        scale_factor: int = cfg.scale_factor
 
         out_channels_ = out_channels
-        if "glu" in activation.lower():
+        if "glu" in cfg.activation.lower():
             out_channels_ *= 2
-        if scale_factor > 0:
-            out_channels_ *= abs(scale_factor) ** 2
-        elif scale_factor < 0:
-            out_channels_ //= abs(scale_factor) ** 2
+        if cfg.scale_factor > 0:
+            out_channels_ *= abs(cfg.scale_factor) ** 2
+        elif cfg.scale_factor < 0:
+            out_channels_ //= abs(cfg.scale_factor) ** 2
         self.conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels_,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
+            kernel_size=cfg.kernel_size,
+            stride=cfg.stride,
+            padding=cfg.padding,
+            dilation=cfg.dilation,
+            groups=cfg.groups,
+            bias=cfg.bias,
+            padding_mode=cfg.padding_mode
         )
-        if norm != "none" and norm != "group":
-            norm_cfg["num_features"] = out_channels_
-        elif norm == "group":
-            norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
+        if cfg.norm != "none" and cfg.norm != "group":
+            cfg.norm_cfg["num_features"] = out_channels_
+        elif cfg.norm == "group":
+            cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
-        self.norm = get_norm(norm, **norm_cfg)
-        if scale_factor > 0:
-            self.pixel_shuffle = nn.PixelShuffle(scale_factor)
-        elif scale_factor < 0:
-            self.pixel_shuffle = nn.PixelUnshuffle(abs(scale_factor))
+        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        if cfg.scale_factor > 0:
+            self.pixel_shuffle = nn.PixelShuffle(cfg.scale_factor)
+        elif cfg.scale_factor < 0:
+            self.pixel_shuffle = nn.PixelUnshuffle(abs(cfg.scale_factor))
         else:
             self.pixel_shuffle = nn.Identity()
-        self.activation = Activation(activation, dim=-3)
-        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+        self.activation = Activation(cfg.activation, dim=-3)
+        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
         self.norm_first = cfg.norm_first
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -507,6 +497,7 @@ class ResidualBlock(nn.Module):
         norm: Literal["batch", "group", "none"] = "none",
         norm_cfg: dict[str, Any] | None = None,
         dropout: float = 0.0,
+        padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros",
     ) -> None:
         super().__init__()
         first_cfg = ConvConfig(
@@ -520,6 +511,7 @@ class ResidualBlock(nn.Module):
             dropout=dropout,
             norm=norm,
             norm_cfg=norm_cfg or {},
+            padding_mode=padding_mode,
         )
         second_cfg = ConvConfig(
             activation="Identity",
@@ -532,6 +524,7 @@ class ResidualBlock(nn.Module):
             dropout=dropout,
             norm=norm,
             norm_cfg=norm_cfg or {},
+            padding_mode=padding_mode,
         )
         self.conv_block = nn.Sequential(
             ConvNormActivation(

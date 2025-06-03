@@ -604,6 +604,7 @@ class ResNetPixUnshuffle(nn.Module):
             dropout=cfg.dropout,
             norm=cfg.norm,
             norm_cfg=cfg.norm_cfg,
+            padding_mode=cfg.padding_mode
         )
         # First layer
         self.conv1 = ConvNormActivation(self.obs_shape[0], cfg.conv_channel, first_cfg)
@@ -629,6 +630,7 @@ class ResNetPixUnshuffle(nn.Module):
                 cfg.norm,
                 cfg.norm_cfg,
                 cfg.dropout,
+                cfg.padding_mode
             )
             for _ in range(cfg.n_res_blocks)
         ]
@@ -932,6 +934,7 @@ class ResNetPixShuffle(nn.Module):
             dropout=self.dropout,
             norm=cfg.norm,
             norm_cfg=cfg.norm_cfg,
+            padding_mode=cfg.padding_mode,
         )
 
         # First layer
@@ -946,6 +949,7 @@ class ResNetPixShuffle(nn.Module):
                 self.norm,
                 self.norm_cfg,
                 self.dropout,
+                cfg.padding_mode
             )
             for _ in range(self.n_res_blocks)
         ]
