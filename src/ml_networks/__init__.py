@@ -16,6 +16,7 @@ from ml_networks.config import (
     ContrastiveLearningConfig
 )
 from ml_networks.contrastive import ContrastiveLearningLoss
+from ml_networks.hypernetworks import HyperNet
 from ml_networks.utils import (determine_loader, get_optimizer, 
                                gumbel_softmax, seed_worker, 
                                softmax, torch_fix_seed, 
@@ -44,6 +45,7 @@ __all__ = [
     "ConvTranspose",
     "Decoder",
     "Encoder",
+    "HyperNet",
     "LinearConfig",
     "MLPConfig",
     "ProgressBarCallback",
