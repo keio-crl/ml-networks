@@ -267,6 +267,21 @@ class ResNetConfig:
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 @dataclass
+class UNetConfig:
+    channels: Tuple[int, ...]
+    conv_cfg: ConvConfig
+    cond_cfg: MLPConfig
+    cond_pred_scale: bool = False
+    nhead: Optional[int] = None
+    has_attn: bool = False
+
+    def __post_init__(self):
+        if self.has_attn:
+            assert self.nhead is not None, "nhead must be specified when has_attn is True."
+        if isinstance(self.channels, list) or isinstance(self.channels, ListConfig):
+            self.channels = tuple(self.channels)
+
+@dataclass
 class LinearConfig:
     """
     A linear layer configuration.
