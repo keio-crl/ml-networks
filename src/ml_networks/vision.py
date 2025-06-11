@@ -178,7 +178,7 @@ class Encoder(pl.LightningModule):
                         fc_cfg.additional_layer, MLPConfig
                 ) else nn.Identity(),
             )
-            if isinstance(fc_cfg.additional_layer, SpatialSoftmaxConfig):
+            if fc_cfg.additional_layer is None:
                 self.feature_dim = self.last_channel * 2
         else:
             self.fc = nn.Identity()
