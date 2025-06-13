@@ -32,25 +32,30 @@ from ml_networks.loss import (FocalFrequencyLoss, focal_loss, binary_focal_loss,
 
 from ml_networks.layers import (LinearNormActivation, MLPLayer, TransformerLayer,
                                 ConvNormActivation, ConvTransposeNormActivation,
+                                ConvNormActivation1d, ConvTransposeNormActivation1d,
                                 ResidualBlock, PositionalEncoding, PatchEmbed,
                                 SpatialSoftmax, get_norm)
 
-from ml_networks.unet import ConditionalUnet, Attention2d
+from ml_networks.unet import ConditionalUnet2d, Attention2d, ConditionalUnet1d, Attention1d
 
 __all__ = [
     "MinMaxNormalize",
     "Activation",
     "Attention2d",
+    "Attention1d",
     "CRReLU",
     "ContrastiveLearningConfig",
     "ContrastiveLearningLoss",
     "ConvConfig",
     "ConvNormActivation",
+    "ConvNormActivation1d",
     "ConvTransposeNormActivation",
     "ConvNet",
     "ConvNetConfig",
     "ConvTranspose",
-    "ConditionalUnet",
+    "ConvTransposeNormActivation1d",
+    "ConditionalUnet2d",
+    "ConditionalUnet1d",
     "Decoder",
     "DecoderConfig",
     "Encoder",
