@@ -268,12 +268,41 @@ class ResNetConfig:
 
 @dataclass
 class UNetConfig:
+    """
+    UNet configuration.
+    Attributes
+    ----------
+    channels : Tuple[int, ...]
+        Number of channels for each layer.
+    conv_cfg : ConvConfig
+        Convolutional layer configuration.
+    cond_cfg : MLPConfig
+        Conditional configuration for UNet.
+    cond_pred_scale : bool
+        Whether to scale the conditional prediction. Default is False.
+    nhead : Optional[int]
+        Number of heads for attention mechanism. If it's set to None, attention is not applied.
+        Default is None.
+    has_attn : bool
+        Whether to use attention mechanism. Default is False.
+    use_shuffle : bool
+        Whether to use PixelShuffle or PixelUnshuffle. Default is False.
+    use_hypernet : bool
+        Whether to use hypernetwork. Default is False.
+    hyper_mlp_cfg : Optional[MLPConfig]
+        Hypernetwork configuration. If it's set to None, hypernetwork is not used.
+        Default is None.
+    """
     channels: Tuple[int, ...]
     conv_cfg: ConvConfig
     cond_cfg: MLPConfig
     cond_pred_scale: bool = False
     nhead: Optional[int] = None
     has_attn: bool = False
+    use_shuffle: bool = False
+    use_hypernet: bool = False
+    hyper_mlp_cfg: Optional[MLPConfig] = None
+    
 
     def __post_init__(self):
         if self.has_attn:
