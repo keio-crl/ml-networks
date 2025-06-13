@@ -7,13 +7,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torchgeometry.contrib.spatial_soft_argmax2d import create_meshgrid, spatial_soft_argmax2d
+from einops import rearrange
 
 from ml_networks.activations import Activation
 from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
 
 
 def get_norm(
-    norm: Literal["layer", "rms", "group", "batch", "none"],
+    norm: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"],
     **kwargs: Any,
 ) -> nn.Module:
     """
@@ -49,9 +50,14 @@ def get_norm(
     GroupNorm(1, 12, eps=1e-05, affine=True)
 
     >>> cfg = {"num_features": 1, "eps": 1e-05, "momentum": 0.1, "affine": True, "track_running_stats": True}
-    >>> norm = get_norm("batch", **cfg)
+    >>> norm = get_norm("batch2d", **cfg)
     >>> norm
     BatchNorm2d(1, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+
+    >>> cfg = {"num_features": 1, "eps": 1e-05, "momentum": 0.1, "affine": True, "track_running_stats": True}
+    >>> norm = get_norm("batch1d", **cfg)
+    >>> norm
+    BatchNorm1d(1, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 
     >>> norm = get_norm("none")
     >>> norm
@@ -64,8 +70,10 @@ def get_norm(
         return nn.RMSNorm(**kwargs)
     if norm == "group":
         return nn.GroupNorm(**kwargs)
-    if norm == "batch":
+    if norm == "batch2d":
         return nn.BatchNorm2d(**kwargs)
+    if norm == "batch1d":
+        return nn.BatchNorm1d(**kwargs)
     return nn.Identity()
 
 
@@ -460,6 +468,134 @@ class ConvNormActivation(nn.Module):
             x = self.dropout(x)
         return x
 
+class ConvNormActivation1d(nn.Module):
+    """
+    1D Convolutional layer with normalization and activation, and dropouts.
+
+    Parameters
+    ----------
+    in_channels : int
+        Input channels.
+    out_channels : int
+        Output channels.
+    cfg : ConvConfig
+        Convolutional layer configuration.
+
+    Examples
+    --------
+    >>> cfg = ConvConfig(
+    ...     activation="ReLU",
+    ...     kernel_size=3,
+    ...     stride=1,
+    ...     padding=1,
+    ...     dilation=1,
+    ...     groups=1,
+    ...     bias=True,
+    ...     dropout=0.1,
+    ...     norm="batch",
+    ...     norm_cfg={"affine": True, "track_running_stats": True},
+    ...     padding_mode="zeros"
+    ... )
+    >>> conv = ConvNormActivation1d(3, 16, cfg)
+    >>> x = torch.randn(1, 3, 32)
+    >>> output = conv(x)
+    >>> output.shape
+    torch.Size([1, 16, 32])
+    >>> cfg = ConvConfig(
+    ...     activation="SiGLU",
+    ...     kernel_size=3,
+    ...     stride=1,
+    ...     padding=1,
+    ...     dilation=1,
+    ...     groups=1,
+    ...     bias=True,
+    ...     dropout=0.0,
+    ...     norm="none",
+    ...     norm_cfg={},
+    ...     padding_mode="zeros"
+    ... )
+    >>> conv = ConvNormActivation1d(3, 16, cfg)
+    >>> x = torch.randn(1, 3, 32)
+    >>> output = conv(x)
+    >>> output.shape
+    torch.Size([1, 16, 32])
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        cfg: ConvConfig,
+    ) -> None:
+        super().__init__()
+
+        out_channels_ = out_channels
+        if "glu" in cfg.activation.lower():
+            out_channels_ *= 2
+        if cfg.scale_factor > 0:
+            out_channels_ *= abs(cfg.scale_factor)
+        elif cfg.scale_factor < 0:
+            out_channels_ //= abs(cfg.scale_factor)
+        self.conv = nn.Conv1d(
+            in_channels=in_channels,
+            out_channels=out_channels_,
+            kernel_size=cfg.kernel_size,
+            stride=cfg.stride,
+            padding=cfg.padding,
+            dilation=cfg.dilation,
+            groups=cfg.groups,
+            bias=cfg.bias,
+            padding_mode=cfg.padding_mode
+        )
+        if cfg.norm != "none" and cfg.norm != "group":
+            cfg.norm_cfg["num_features"] = out_channels_
+        elif cfg.norm == "group":
+            cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
+
+        if cfg.scale_factor > 0:
+            self.horizontal_shuffle = HorizonShuffle(cfg.scale_factor)
+        elif cfg.scale_factor < 0:
+            self.horizontal_shuffle = HorizonUnShuffle(abs(cfg.scale_factor))
+        else:
+            self.horizontal_shuffle = nn.Identity()
+
+        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        self.activation = Activation(cfg.activation, dim=-2)
+        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
+        self.norm_first = cfg.norm_first
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (B, in_channels, L) or (in_channels, L)
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (B, out_channels, L') or (out_channels, L')
+        L' is calculated as follows:
+        L' = (L + 2*padding - dilation * (kernel_size - 1) - 1) // stride + 1
+
+        """
+        if self.norm_first:
+            x = self.norm(x)
+            x = self.conv(x)
+            x = self.horizontal_shuffle(x)
+            x = self.activation(x)
+            x = self.dropout(x)
+        else:
+            x = self.conv(x)
+            x = self.horizontal_shuffle(x)
+            x = self.norm(x)
+            x = self.activation(x)
+            x = self.dropout(x)
+        return x
+
+
 
 class ResidualBlock(nn.Module):
     """
@@ -660,6 +796,107 @@ class ConvTransposeNormActivation(nn.Module):
         x = self.activation(x)
         return self.dropout(x)
 
+class ConvTransposeNormActivation1d(nn.Module):
+    """
+    1D Transposed convolutional layer with normalization and activation, and dropouts.
+
+    Parameters
+    ----------
+    in_channels : int
+        Input channels.
+    out_channels : int
+        Output channels.
+    cfg : ConvConfig
+        Convolutional layer configuration.
+
+    Examples
+    --------
+    >>> cfg = ConvConfig(
+    ...     activation="ReLU",
+    ...     kernel_size=3,
+    ...     stride=1,
+    ...     padding=1,
+    ...     output_padding=0,
+    ...     dilation=1,
+    ...     groups=1,
+    ...     bias=True,
+    ...     dropout=0.1,
+    ...     norm="batch",
+    ... )
+    >>> conv = ConvTransposeNormActivation1d(3, 16, cfg)
+    >>> x = torch.randn(1, 3, 32)
+    >>> output = conv(x)
+    >>> output.shape
+    torch.Size([1, 16, 32])
+
+    >>> cfg = ConvConfig(
+    ...     activation="SiGLU",
+    ...     kernel_size=3,
+    ...     stride=1,
+    ...     padding=1,
+    ...     output_padding=0,
+    ...     dilation=1,
+    ...     groups=1,
+    ...     bias=True,
+    ...     dropout=0.0,
+    ...     norm="none",
+    ...     norm_cfg={}
+    ... )
+    >>> conv = ConvTransposeNormActivation1d(3, 16, cfg)
+    >>> x = torch.randn(1, 3, 32)
+    >>> output = conv(x)
+    >>> output.shape
+    torch.Size([1, 16, 32])
+    
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        cfg: ConvConfig,
+    ) -> None:
+        super().__init__()
+
+        self.conv = nn.ConvTranspose1d(
+            in_channels=in_channels,
+            out_channels=out_channels * 2 if "glu" in cfg.activation.lower() else out_channels,
+            kernel_size=cfg.kernel_size,
+            stride=cfg.stride,
+            padding=cfg.padding,
+            output_padding=cfg.output_padding,
+            groups=cfg.groups,
+            bias=cfg.bias,
+            dilation=cfg.dilation
+        )
+        if cfg.norm not in {"none", "group"}:
+            cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+        elif cfg.norm == "group":
+            cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        self.activation = Activation(cfg.activation, dim=-2)
+        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (B, in_channels, L) or (in_channels, L)
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (B, out_channels, L') or (out_channels, L')
+        L' is calculated as follows:
+        L' = (L - 1) * stride - 2 * padding + kernel_size + output_padding
+        """
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        return self.dropout(x)
 
 class TransformerLayer(nn.Module):
     """
@@ -1035,6 +1272,66 @@ class SpatialSoftmax(nn.Module):
             Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
         """
         x = self.spatial_softmax(x/self.temperature)
+        return x
+
+class HorizonShuffle(nn.Module):
+    """Horizon Shuffle Layer.
+
+    Args:
+        dim (int): 入力・出力チャンネル数
+
+    Examples
+    --------
+    >>> shuffle = HorizonShuffle(2)
+    >>> x = torch.randn(2, 64, 50)
+    >>> out = shuffle(x)
+    >>> out.shape
+    torch.Size([2, 32, 100])
+    """
+    def __init__(self, upscale_factor: int = 2):
+        super().__init__()
+        self.upscale_factor = upscale_factor
+
+    def forward(self, x: torch.Tensor):
+        """Horizon Shuffle Layer.
+        Args:
+            x (torch.Tensor): 入力テンソル (B, C, T)
+        Returns:
+            torch.Tensor: 出力テンソル (B, C // upscale_factor, T * upscale_factor)
+        """
+        b, c, t = x.shape
+        assert c % self.upscale_factor == 0, "Input length must be divisible by upscale_factor."
+        x = rearrange(x, 'b (c u) t -> b c (t u)', u=self.upscale_factor)
+        return x
+
+class HorizonUnShuffle(nn.Module):
+    """Horizon UnShuffle Layer.
+
+    Args:
+        upscale_factor (int): アップスケールファクター
+
+    Examples
+    --------
+    >>> unshuffle = HorizonUnShuffle(2)
+    >>> x = torch.randn(2, 32, 100)
+    >>> out = unshuffle(x)
+    >>> out.shape
+    torch.Size([2, 64, 50])
+    """
+    def __init__(self, downscale_factor: int = 2):
+        super().__init__()
+        self.downscale_factor = downscale_factor
+
+    def forward(self, x: torch.Tensor):
+        """Horizon UnShuffle Layer.
+        Args:
+            x (torch.Tensor): 入力テンソル (B, C // upscale_factor, T * upscale_factor)
+        Returns:
+            torch.Tensor: 出力テンソル (B, C, T)
+        """
+        b, c, t = x.shape
+        assert t % self.downscale_factor == 0, "Input length must be divisible by upscale_factor."
+        x = rearrange(x, 'b c (t u) -> b (c u) t', u=self.downscale_factor)
         return x
 
 
