@@ -1,6 +1,6 @@
 import warnings
 from collections import OrderedDict
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -119,7 +119,7 @@ class HyperNetMixin:
         >>> net.flat_output_size()
         5
         """
-        flat_output_size = sum(int(np.prod(v))
+        flat_output_size = sum(int(np.prod(v.shape))
                                for v in self.output_shapes.values())
         return flat_output_size
 
@@ -145,7 +145,7 @@ class HyperNetMixin:
         offset = 0
         offsets = {}
         for name, shape in self.output_shapes.items():
-            size = int(np.prod(shape))
+            size = int(np.prod(shape.shape))
             offsets[name] = (offset, size)
             offset += size
         return offsets
@@ -257,7 +257,7 @@ class HyperNetMixin:
         outputs = {}
         batch_dim = flat_output.shape[0]
         for name, shape in self.output_shapes.items():
-            shape = (batch_dim, *shape)
+            shape = (batch_dim, *shape.shape)
             outputs[name] = flat_output.narrow(1, *self._output_offsets[name]).view(shape)
         return outputs
 
@@ -275,48 +275,54 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
     --------
     >>> from ml_networks.config import MLPConfig, LinearConfig
     >>> input_dim = 10
-    >>> output_shapes = {"weight": (5, 10), "bias": (5,)}
+    >>> cond_dim = 128
+    >>> target_net = nn.Linear(10, 5)
+    >>> output_params = target_net.state_dict()
     >>> mlp_cfg = MLPConfig(
     ...     hidden_dim=64,
     ...     n_layers=2,
     ...     output_activation="ReLU",
     ...     linear_cfg=LinearConfig(
     ...         activation="ReLU",
-    ...         norm="none",
-    ...         dropout=0.0,
-    ...         bias=True
     ...     )
     ... )
-    >>> net = HyperNet(input_dim, output_shapes, mlp_cfg)
+    >>> net = HyperNet(cond_dim, output_params, mlp_cfg)
+    >>> condition = torch.randn(2, cond_dim)
     >>> x = torch.randn(2, input_dim)
-    >>> outputs = net(x)
-    >>> outputs["weight"].shape
-    torch.Size([2, 5, 10])
-    >>> outputs["bias"].shape
+    >>> param = net(condition)
+    >>> outputs = torch.func.functional_call(target_net, param, x)
+    >>> outputs.shape
     torch.Size([2, 5])
     """
 
     def __init__(
         self,
         input_dim: int,
-        output_shapes: Dict[str, Shape],
-        mlp_cfg: MLPConfig,
+        output_params: Dict[str, Shape],
+        fc_cfg: Optional[MLPConfig] = None,
         encoding=None,
     ):
         super().__init__()
 
         self.input_dim = input_dim
-        self.output_shapes = output_shapes
+        self.output_shapes = output_params
         self.encoding = encoding
 
         # Cache this property to avoid recomputation
         self._output_offsets = self.output_offsets()
 
-        self.backbone = MLPLayer(
-            self.input_dim,
-            self.flat_output_size(),
-            mlp_cfg
-        )
+
+        if fc_cfg is not None:
+            self.backbone = MLPLayer(
+                self.input_dim,
+                self.flat_output_size(),
+                fc_cfg
+            )
+        else:
+            self.backbone = nn.Linear(
+                self.input_dim,
+                self.flat_output_size()
+            )
 
     def forward(self, inputs: torch.Tensor) -> Dict[str, torch.Tensor]:
         """Performs a forward pass of the neural network.
