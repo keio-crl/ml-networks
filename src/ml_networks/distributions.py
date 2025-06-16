@@ -151,7 +151,7 @@ class NormalStoch:
             Path to save the parameters.
 
         """
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         
         save_blosc2(f"{path}/mean.blosc2", self.mean.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/std.blosc2", self.std.detach().clone().cpu().numpy())
@@ -283,7 +283,7 @@ class CategoricalStoch:
         path : str
             Path to save the parameters.
         """
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         
         save_blosc2(f"{path}/logits.blosc2", self.logits.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
@@ -407,7 +407,7 @@ class BernoulliStoch:
         )
 
     def save(self, path: str):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         
         save_blosc2(f"{path}/logits.blosc2", self.logits.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
