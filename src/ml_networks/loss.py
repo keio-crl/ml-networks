@@ -69,7 +69,7 @@ class FocalFrequencyLoss:
             freq = torch.rfft(y, 2, onesided=False, normalized=True)
         return freq
 
-    def loss_formulation(self, recon_freq, real_freq, matrix=None, mean_batch=True):
+    def loss_formulation(self, recon_freq, real_freq, matrix=None):
         # spectrum weight matrix
         if matrix is not None:
             # if the matrix is predefined
@@ -104,10 +104,7 @@ class FocalFrequencyLoss:
         # dynamic spectrum weighting (Hadamard product)
         loss = weight_matrix * freq_distance
 
-        if mean_batch:
-            loss = loss.sum(dim=[-1, -2, -3]).mean()
-        else:
-            loss = loss.sum(dim=[-1, -2, -3])
+        loss = loss.sum(dim=[-1, -2, -3])
         return loss
 
     def __call__(self, pred, target, matrix=None, mean_batch=True, **kwargs):
@@ -177,7 +174,7 @@ def charbonnier(
     """
     x = prediction - target
     loss = (x**2 + epsilon**2) ** (alpha / 2)
-    return torch.sum(loss, dim=sum_dim).mean()
+    return torch.sum(loss, dim=sum_dim)
 
 def kl_divergence(posterior: StochState, prior: StochState, **kwargs):
     """
@@ -197,7 +194,6 @@ def kl_divergence(posterior: StochState, prior: StochState, **kwargs):
 
     """
     kld = D.kl_divergence(posterior.get_distribution(), prior.get_distribution())
-    kld = kld.mean()
 
     return kld
 
@@ -236,7 +232,6 @@ def kl_balancing(posterior: StochState, prior: StochState, weight: float=0.8):
 
     kld = kld_prior + kld_posterior
 
-    kld = kld.mean()
 
     return kld
 
@@ -313,5 +308,5 @@ def binary_focal_loss(
         loss = focal_weight * loss
     else:
         loss = F.binary_cross_entropy_with_logits(prediction, target, reduction="none")
-    return loss.sum(sum_dim).mean()
+    return loss.sum(sum_dim)
 
