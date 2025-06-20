@@ -162,6 +162,9 @@ full_connection_cfg = SpatialSoftmaxConfig(
     is_argmax=False, # argmaxを使うかどうか．Default: False
 )
 
+# Adaptive(Global)AveragePoolingを使う場合は以下のように設定する
+full_connection_cfg = AdaptiveAvgPoolConfig()
+
 # 特徴マップをそのまま出力する場合は以下のように設定する
 full_connection_cfg = None
 
