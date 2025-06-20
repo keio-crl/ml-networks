@@ -473,6 +473,7 @@ class AdaptiveAveragePoolingConfig:
     """
 
     output_size: Union[int, Tuple[int, ...]] = (1, 1)
+    additional_layer: Optional[Union[MLPConfig, LinearConfig]] = None
 
 
 @dataclass
