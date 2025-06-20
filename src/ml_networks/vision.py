@@ -180,7 +180,9 @@ class Encoder(pl.LightningModule):
                 ) else nn.Identity(),
             )
             if fc_cfg.additional_layer is None:
-                self.feature_dim = self.last_channel * np.prod(fc_cfg.output_size)
+                self.feature_dim = self.last_channel * (fc_cfg.output_size**2) if isinstance(
+                    fc_cfg.output_size, int
+                ) else self.last_channel * np.prod(fc_cfg.output_size)
         
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
             self.fc = nn.Sequential(

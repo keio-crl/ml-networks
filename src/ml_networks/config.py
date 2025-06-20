@@ -475,6 +475,13 @@ class AdaptiveAveragePoolingConfig:
     output_size: Union[int, Tuple[int, ...]] = (1, 1)
     additional_layer: Optional[Union[MLPConfig, LinearConfig]] = None
 
+    def __post_init__(self) -> None:
+        """Ensure output_size is a tuple."""
+        if isinstance(self.output_size, int):
+            self.output_size = tuple([self.output_size, self.output_size])
+        elif isinstance(self.output_size, list) or isinstance(self.output_size, ListConfig):
+            self.output_size = tuple(self.output_size)
+
 
 @dataclass
 class SpatialSoftmaxConfig:
