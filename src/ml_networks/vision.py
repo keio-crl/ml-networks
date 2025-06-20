@@ -7,6 +7,7 @@ from einops import rearrange
 from torch import nn
 
 from ml_networks.config import (
+    AdaptiveAveragePoolingConfig,
     ConvConfig,
     ConvNetConfig,
     LinearConfig,
@@ -160,6 +161,27 @@ class Encoder(pl.LightningModule):
                 nn.Flatten(),
                 LinearNormActivation(self.conved_size, feature_dim, fc_cfg),
             )
+        elif isinstance(fc_cfg, AdaptiveAveragePoolingConfig):
+            self.fc = nn.Sequential(
+                nn.AdaptiveAvgPool2d(fc_cfg.output_size),
+                nn.Flatten(),
+                LinearNormActivation(
+                    int(self.last_channel * np.prod(fc_cfg.output_size)),
+                    feature_dim,
+                    fc_cfg.additional_layer
+                ) if isinstance(
+                        fc_cfg.additional_layer, LinearConfig
+                ) else MLPLayer(
+                    int(self.last_channel * np.prod(fc_cfg.output_size)),
+                    feature_dim,
+                    fc_cfg.additional_layer
+                ) if isinstance(
+                        fc_cfg.additional_layer, MLPConfig
+                ) else nn.Identity(),
+            )
+            if fc_cfg.additional_layer is None:
+                self.feature_dim = self.last_channel * np.prod(fc_cfg.output_size)
+        
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
             self.fc = nn.Sequential(
                 SpatialSoftmax(fc_cfg),

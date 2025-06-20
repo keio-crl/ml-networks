@@ -2,6 +2,7 @@
 from ml_networks.activations import Activation, CRReLU, REReLU, SiGLU, TanhExp
 from ml_networks.callbacks import ProgressBarCallback 
 from ml_networks.config import (
+    AdaptiveAveragePoolingConfig,
     ConvConfig,
     ConvNetConfig,
     LinearConfig,
@@ -41,6 +42,7 @@ from ml_networks.unet import ConditionalUnet2d, Attention2d, ConditionalUnet1d, 
 __all__ = [
     "MinMaxNormalize",
     "Activation",
+    "AdaptiveAveragePoolingConfig",
     "Attention2d",
     "Attention1d",
     "CRReLU",

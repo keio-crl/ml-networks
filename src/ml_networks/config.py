@@ -460,6 +460,20 @@ class ViTConfig:
     cls_token: bool = True
     init_channel: int = 16
 
+@dataclass
+class AdaptiveAveragePoolingConfig:
+    """
+    Adaptive average pooling configuration.
+
+    Attributes
+    ----------
+    output_size : Union[int, Tuple[int, ...]]
+        Output size of the pooling layer. If it's an integer, it will be used for both height and width.
+        If it's a tuple, it should contain two integers for height and width.
+    """
+
+    output_size: Union[int, Tuple[int, ...]] = (1, 1)
+
 
 @dataclass
 class SpatialSoftmaxConfig:
