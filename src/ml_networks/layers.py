@@ -161,7 +161,12 @@ class LinearNormActivation(nn.Module):
             output_dim * 2 if "glu" in cfg.activation.lower() else output_dim,
             bias=cfg.bias,
         )
-        cfg.norm_cfg["normalized_shape"] = output_dim * 2 if "glu" in cfg.activation.lower() else output_dim
+        if cfg.norm_first:
+            normalized_shape = input_dim 
+        else:
+            normalized_shape = output_dim * 2 if "glu" in cfg.activation.lower() else output_dim
+
+        cfg.norm_cfg["normalized_shape"] = normalized_shape
         self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation)
         if cfg.dropout > 0:
