@@ -106,8 +106,8 @@ class ContrastiveLearningLoss(pl.LightningModule):
             return self.calc_nce(feature1, feature2, return_emb)
 
         # Reshape inputs
-        feature1 = feature1.view(-1, feature1.shape[-2], self.dim_input1)
-        feature2 = feature2.view(-1, feature2.shape[-2], self.dim_input2)
+        feature1 = feature1.reshape(-1, feature1.shape[-2], self.dim_input1)
+        feature2 = feature2.reshape(-1, feature2.shape[-2], self.dim_input2)
         batch, length, _ = feature1.shape
 
         # Calculate embeddings
@@ -259,8 +259,8 @@ class ContrastiveLearningLoss(pl.LightningModule):
             If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
         """
         loss_dict: Dict[str, torch.Tensor] = {}
-        emb_1 = self.eval_func(feature1.view(-1, self.dim_input1))
-        emb_2 = self.eval_func2(feature2.view(-1, self.dim_input2))
+        emb_1 = self.eval_func(feature1.reshape(-1, self.dim_input1))
+        emb_2 = self.eval_func2(feature2.reshape(-1, self.dim_input2))
 
         if self.is_ce_like:
             labels = torch.arange(len(emb_1), device=emb_1.device)
