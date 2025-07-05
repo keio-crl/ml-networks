@@ -36,15 +36,6 @@ class ConditionalUnet2d(nn.Module):
     ...         activation="ReLU",
     ...         dropout=0.0
     ...     ),
-    ...     cond_cfg=MLPConfig(
-    ...         hidden_dim=128,
-    ...         n_layers=2,
-    ...         output_activation="ReLU",
-    ...         linear_cfg=LinearConfig(
-    ...             activation="ReLU",
-    ...             dropout=0.0,
-    ...         )
-    ...     ),
     ...     has_attn=True,
     ...     nhead=8,
     ...     cond_pred_scale=True
@@ -187,15 +178,6 @@ class ConditionalUnet1d(nn.Module):
     ...         groups=1,
     ...         activation="ReLU",
     ...         dropout=0.0
-    ...     ),
-    ...     cond_cfg=MLPConfig(
-    ...         hidden_dim=128,
-    ...         n_layers=2,
-    ...         output_activation="ReLU",
-    ...         linear_cfg=LinearConfig(
-    ...             activation="ReLU",
-    ...             dropout=0.0,
-    ...         )
     ...     ),
     ...     has_attn=True,
     ...     nhead=8,

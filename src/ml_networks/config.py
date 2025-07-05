@@ -295,7 +295,6 @@ class UNetConfig:
     """
     channels: Tuple[int, ...]
     conv_cfg: ConvConfig
-    cond_cfg: MLPConfig
     cond_pred_scale: bool = False
     nhead: Optional[int] = None
     has_attn: bool = False
