@@ -293,7 +293,7 @@ class ConditionalUnet1d(nn.Module):
             cond: torch.Tensor,
             ):
         """
-        x: (B,T,input_dim)
+        x: (B,input_dim, T)
         t: (B,) or int, diffusion step
         cond: (B,cond_dim)
         output: (B,T,input_dim)
