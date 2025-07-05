@@ -128,6 +128,8 @@ class ConditionalUnet2d(nn.Module):
         output: (B,T,input_dim)
         """
         batch_shape = base.shape[:-3]
+        assert base.shape[-3:] == self.obs_shape, \
+            f"Input shape {base.shape[-3:]} does not match expected shape {self.obs_shape}"
         base = base.reshape(-1, *self.obs_shape) 
 
             
@@ -297,6 +299,8 @@ class ConditionalUnet1d(nn.Module):
         output: (B,T,input_dim)
         """
         batch_shape = base.shape[:-2]
+        assert base.shape[-2:] == self.obs_shape, \
+            f"Input shape {base.shape[-2:]} does not match expected shape {self.obs_shape}"
         base = base.reshape(-1, *self.obs_shape) 
 
             
