@@ -317,7 +317,10 @@ class ConditionalUnet1d(nn.Module):
             x = downsample(x)
 
         for mid_module in self.mid_modules:
-            x = mid_module(x, global_feature)
+            if isinstance(mid_module, nn.Identity):
+                x = mid_module(x)
+            else:
+                x = mid_module(x, global_feature)
 
         for (resnet, attn, resnet2, upsample) in self.up_modules:
             x = torch.cat((x, h.pop()), dim=1)
