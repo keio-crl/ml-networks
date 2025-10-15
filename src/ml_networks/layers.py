@@ -1136,6 +1136,125 @@ class PatchEmbed(nn.Module):
         # 軸の入れ替え (B, D, Np) -> (B, Np, D)
         return x.transpose(1, 2)
 
+class Attention2d(nn.Module):
+    """2d自己注意機構。
+
+    Args:
+        channels (int): 入力・出力チャンネル数
+        nhead (int): 注意ヘッドの数
+
+    Examples
+    --------
+    >>> attn = Attention2d(channels=64, nhead=8)
+    >>> x = torch.randn(2, 64, 32, 32)
+    >>> out = attn(x)
+    >>> out.shape
+    torch.Size([2, 64, 32, 32])
+    """
+    def __init__(
+        self,
+        channels: int,
+        nhead: int,
+    ):
+        super().__init__()
+        self.channels = channels
+        assert (
+            channels % nhead == 0
+        ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
+        self.n_heads = nhead
+        cfg = ConvConfig(
+            kernel_size=1,
+            padding=0,
+            stride=1,
+            activation="Identity",
+            dropout=0.0,
+        )
+        first_cfg = cfg
+        first_cfg.norm_first = True
+        self.qkv = ConvNormActivation(channels, channels * 3, first_cfg)
+
+        self.proj_out = ConvNormActivation(
+            channels, channels, cfg
+        )
+
+    def qkv_attn(self, qkv):
+        """Apply QKV attention.
+
+        :param qkv: an [N x (Heads * 3 * C) x H x W] tensor of query, key, value. 
+        :return: an [N x (C * Head) x H x W] tensor of attended values.
+        """
+        bs, channels, height, width = qkv.shape
+        assert channels % (3 * self.n_heads) == 0
+        ch = channels // (3 * self.n_heads)
+        q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, height*width).split(ch, dim=1)
+        scale = 1 / np.sqrt(np.sqrt(ch))
+        weight = torch.einsum(
+            "bct,bcs->bts", q * scale, k * scale
+        )  # More stable with f16 than dividing afterwards
+        weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
+        a = torch.einsum("bts,bcs->bct", weight, v)
+        return a.reshape(bs, -1, height, width)
+
+    def forward(self, x, *args):
+        b, c, *spatial = x.shape
+        qkv = self.qkv(x)
+        h = self.qkv_attn(qkv)
+        h = self.proj_out(h)
+        return (x + h).reshape(b, c, *spatial)
+
+class Attention1d(nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        nhead: int,
+    ):
+        super().__init__()
+        self.channels = channels
+        assert (
+            channels % nhead == 0
+        ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
+        self.n_heads = nhead
+        cfg = ConvConfig(
+            kernel_size=1,
+            padding=0,
+            stride=1,
+            activation="Identity",
+            dropout=0.0,
+        )
+        first_cfg = cfg
+        first_cfg.norm_first = True
+        self.qkv = ConvNormActivation1d(channels, channels * 3, first_cfg)
+
+        self.proj_out = ConvNormActivation1d(
+            channels, channels, cfg
+        )
+
+    def qkv_attention(self, qkv):
+        """Apply QKV attention.
+
+        :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
+        :return: an [N x (H * C) x T] tensor after attention.
+        """
+        bs, width, length = qkv.shape
+        assert width % (3 * self.n_heads) == 0
+        ch = width // (3 * self.n_heads)
+        q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
+        scale = 1 / np.sqrt(np.sqrt(ch))
+        weight = torch.einsum(
+            "bct,bcs->bts", q * scale, k * scale
+        )  # More stable with f16 than dividing afterwards
+        weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
+        a = torch.einsum("bts,bcs->bct", weight, v)
+        return a.reshape(bs, -1, length)
+
+    def forward(self, x, *args):
+        b, c, *spatial = x.shape
+        x = x.reshape(b, c, -1)
+        qkv = self.qkv(x)
+        h = self.qkv_attention(qkv)
+        h = self.proj_out(h)
+        return (x + h).reshape(b, c, *spatial)
+
 
 class SpatialSoftmax(nn.Module):
     """

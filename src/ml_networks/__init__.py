@@ -35,9 +35,10 @@ from ml_networks.layers import (LinearNormActivation, MLPLayer, TransformerLayer
                                 ConvNormActivation, ConvTransposeNormActivation,
                                 ConvNormActivation1d, ConvTransposeNormActivation1d,
                                 ResidualBlock, PositionalEncoding, PatchEmbed,
-                                SpatialSoftmax, get_norm)
+                                SpatialSoftmax, Attention2d, Attention1d, get_norm)
 
-from ml_networks.unet import ConditionalUnet2d, Attention2d, ConditionalUnet1d, Attention1d
+from ml_networks.unet import ConditionalUnet2d, ConditionalUnet1d
+from ml_networks.base import BaseModule 
 
 __all__ = [
     "MinMaxNormalize",
@@ -45,6 +46,7 @@ __all__ = [
     "AdaptiveAveragePoolingConfig",
     "Attention2d",
     "Attention1d",
+    "BaseModule",
     "CRReLU",
     "ContrastiveLearningConfig",
     "ContrastiveLearningLoss",
