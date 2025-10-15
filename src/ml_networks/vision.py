@@ -661,8 +661,8 @@ class ResNetPixUnshuffle(nn.Module):
                 cfg.dropout,
                 cfg.padding_mode
             )]
-            if cfg.enable_attention_with_nhead:
-                res_blocks += [Attention2d(cfg.conv_channel, nhead=cfg.enable_attention_with_nhead)]
+            if cfg.attention is not None:
+                res_blocks += [Attention2d(cfg.conv_channel, attn_cfg=cfg.attention)]
        
         self.res_blocks = nn.Sequential(*res_blocks)
 
@@ -811,8 +811,8 @@ class ConvNet(nn.Module):
         convs = []
         for i in range(len(self.channels) - 1):
             convs += [ConvNormActivation(self.channels[i], self.channels[i + 1], self.cfg.conv_cfgs[i])]
-            if self.cfg.enable_attention_with_nhead:
-                convs += [Attention2d(self.channels[i + 1], nhead=self.cfg.enable_attention_with_nhead)]
+            if self.cfg.attention is not None:
+                convs += [Attention2d(self.channels[i + 1], attn_cfg=self.cfg.attention)]
 
         return nn.Sequential(*convs)
 
@@ -986,8 +986,8 @@ class ResNetPixShuffle(nn.Module):
                 self.dropout,
                 cfg.padding_mode
             )]
-            if cfg.enable_attention_with_nhead:
-                res_blocks += [Attention2d(self.conv_channel, nhead=cfg.enable_attention_with_nhead)]
+            if cfg.attention is not None:
+                res_blocks += [Attention2d(self.conv_channel, attn_cfg=cfg.attention)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # Second conv layer post residual blocks
@@ -1182,8 +1182,8 @@ class ConvTranspose(nn.Module):
     def _build_conv(self) -> nn.Module:
         convs = []
         for i, cfg in enumerate(self.cfg.conv_cfgs):
-            if self.cfg.enable_attention_with_nhead:
-                convs += [Attention2d(self.channels[i], nhead=self.cfg.enable_attention_with_nhead)]
+            if self.cfg.attention is not None:
+                convs += [Attention2d(self.channels[i], attn_cfg=self.cfg.attention)]
             convs += [ConvTransposeNormActivation(self.channels[i], self.channels[i + 1], cfg)]
         return nn.Sequential(*convs)
 

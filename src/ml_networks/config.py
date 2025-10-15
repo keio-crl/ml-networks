@@ -33,6 +33,19 @@ class ContrastiveLearningConfig:
     dim_input2: Optional[int] = None
     cross_entropy_like: bool = False
 
+@dataclass
+class AttentionConfig:
+    """
+    Attention configuration.
+    Attributes
+    ----------
+    nhead : int
+        Number of heads.
+    patch_size : int
+        Patch size.
+    """
+    nhead: int
+    patch_size: int
 
 
 @dataclass
@@ -157,7 +170,7 @@ class ConvNetConfig:
 
     channels: Tuple[int, ...]
     conv_cfgs: Tuple[ConvConfig, ...]
-    enable_attention_with_nhead: Optional[int] = None
+    attention: AttentionConfig = None
     init_channel: int = 16
 
     def __post_init__(self) -> None:
@@ -241,7 +254,7 @@ class ResNetConfig:
     dropout: float = 0.0
     init_channel: int = 16
     padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
-    enable_attention_with_nhead: Optional[int] = None
+    attention: AttentionConfig = None
 
     def __post_init__(self) -> None:
         """Set `norm_cfg`."""

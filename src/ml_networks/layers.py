@@ -10,7 +10,7 @@ from torchgeometry.contrib.spatial_soft_argmax2d import create_meshgrid, spatial
 from einops import rearrange
 
 from ml_networks.activations import Activation
-from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig
+from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig, AttentionConfig
 
 
 def get_norm(
@@ -1154,14 +1154,22 @@ class Attention2d(nn.Module):
     def __init__(
         self,
         channels: int,
-        nhead: int,
+        nhead: int = None,
+        patch_size: int = 1,
+        attn_cfg: AttentionConfig = None
     ):
         super().__init__()
         self.channels = channels
+        if nhead is None or patch_size is None:
+            assert attn_cfg is not None, "Either nhead and patch_size or attn_cfg must be provided"
+            self.n_heads = attn_cfg.nhead
+            self.patch_size = attn_cfg.patch_size
+        else:
+            self.n_heads = nhead
+            self.patch_size = patch_size
         assert (
-            channels % nhead == 0
+            channels % self.n_heads == 0
         ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
-        self.n_heads = nhead
         cfg = ConvConfig(
             kernel_size=1,
             padding=0,
@@ -1198,7 +1206,9 @@ class Attention2d(nn.Module):
     def forward(self, x, *args):
         b, c, *spatial = x.shape
         qkv = self.qkv(x)
+        qkv = rearrange(qkv, "b c (h p1) (w p2) -> b (c p1 p2) h w", p1=self.patch_size, p2=self.patch_size)
         h = self.qkv_attn(qkv)
+        h = rearrange(h, "b (c p1 p2) h w -> b c (h p1) (w p2)", p1=self.patch_size, p2=self.patch_size)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 
@@ -1206,14 +1216,22 @@ class Attention1d(nn.Module):
     def __init__(
         self,
         channels: int,
-        nhead: int,
+        nhead: int = None,
+        patch_size: int = 1,
+        attn_cfg: AttentionConfig = None
     ):
         super().__init__()
         self.channels = channels
+        if nhead is None:
+            assert attn_cfg is not None, "Either nhead or attn_cfg must be provided"
+            self.n_heads = attn_cfg.nhead
+            self.patch_size = attn_cfg.patch_size
+        else:
+            self.n_heads = nhead
+            self.patch_size = patch_size
         assert (
-            channels % nhead == 0
+            channels % self.n_heads == 0
         ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
-        self.n_heads = nhead
         cfg = ConvConfig(
             kernel_size=1,
             padding=0,
@@ -1251,7 +1269,9 @@ class Attention1d(nn.Module):
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
         qkv = self.qkv(x)
+        qkv = rearrange(qkv, "b c (t p) -> b (c p) t", p=self.patch_size)
         h = self.qkv_attention(qkv)
+        h = rearrange(h, "b (c p) t -> b c (t p)", p=self.patch_size)
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 
