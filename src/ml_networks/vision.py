@@ -28,9 +28,10 @@ from ml_networks.layers import (
     TransformerLayer,
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_transpose_out_shape
+from ml_networks.base import BaseModule
 
 
-class Encoder(pl.LightningModule):
+class Encoder(BaseModule):
     """
     Encoder with various architectures.
 
@@ -230,7 +231,7 @@ class Encoder(pl.LightningModule):
         return x.reshape([*batch_shape, *x.shape[1:]])
 
 
-class Decoder(pl.LightningModule):
+class Decoder(BaseModule):
     """
     Decoder with various architectures.
 
