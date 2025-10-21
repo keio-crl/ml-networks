@@ -45,7 +45,7 @@ class NormalShape:
     stoch: torch.Size
 
 
-@dataclass(frozen=True)
+@dataclass
 class NormalStoch:
     """
     Parameters of a normal distribution and its stochastic sample.
@@ -179,7 +179,7 @@ class CategoricalShape:
     probs: torch.Size
     stoch: torch.Size
 
-@dataclass(frozen=True)
+@dataclass
 class CategoricalStoch:
     """
     Parameters of a categorical distribution and its stochastic sample.
@@ -312,7 +312,7 @@ class BernoulliShape:
     stoch: torch.Size
 
 
-@dataclass(frozen=True)
+@dataclass
 class BernoulliStoch:
     """
     Parameters of a Bernoulli distribution and its stochastic sample.
