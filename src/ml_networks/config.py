@@ -588,7 +588,8 @@ class DecoderConfig:
             Dictionary representation of DecoderConfig.
         """
         self.backbone.dictcfg2dict()
-        self.full_connection.dictcfg2dict()
+        if hasattr(self.full_connection, "dictcfg2dict"):
+            self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
             if isinstance(value, DictConfig):
                 setattr(self, key, convert_dictconfig_to_dict(value))
