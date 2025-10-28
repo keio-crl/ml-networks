@@ -522,8 +522,7 @@ def softmax(
     ValueError
         If the softmax is inf or nan.
     """
-    x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
-    x = x / temperature
+    x = inputs / temperature
     x = torch.exp(F.log_softmax(x, dim=dim))
     if torch.isinf(x).any() or torch.isnan(x).any():
         msg = "softmax is inf or nan"
