@@ -495,7 +495,6 @@ def get_optimizer(
     return optimizer(param, **kwargs)
 
 
-@torch.jit.script
 def softmax(
     inputs: torch.Tensor,
     dim: int,
@@ -525,7 +524,7 @@ def softmax(
     """
     x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
     x = x / temperature
-    x = torch.softmax(x, dim=dim)
+    x = torch.exp(F.log_softmax(x, dim=dim))
     if torch.isinf(x).any() or torch.isnan(x).any():
         msg = "softmax is inf or nan"
         raise ValueError(msg)
