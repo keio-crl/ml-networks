@@ -33,6 +33,19 @@ class ContrastiveLearningConfig:
     dim_input2: Optional[int] = None
     cross_entropy_like: bool = False
 
+@dataclass
+class AttentionConfig:
+    """
+    Attention configuration.
+    Attributes
+    ----------
+    nhead : int
+        Number of heads.
+    patch_size : int
+        Patch size.
+    """
+    nhead: int
+    patch_size: int
 
 
 @dataclass
@@ -157,6 +170,7 @@ class ConvNetConfig:
 
     channels: Tuple[int, ...]
     conv_cfgs: Tuple[ConvConfig, ...]
+    attention: AttentionConfig = None
     init_channel: int = 16
 
     def __post_init__(self) -> None:
@@ -240,6 +254,7 @@ class ResNetConfig:
     dropout: float = 0.0
     init_channel: int = 16
     padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
+    attention: AttentionConfig = None
 
     def __post_init__(self) -> None:
         """Set `norm_cfg`."""
@@ -573,7 +588,8 @@ class DecoderConfig:
             Dictionary representation of DecoderConfig.
         """
         self.backbone.dictcfg2dict()
-        self.full_connection.dictcfg2dict()
+        if hasattr(self.full_connection, "dictcfg2dict"):
+            self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
             if isinstance(value, DictConfig):
                 setattr(self, key, convert_dictconfig_to_dict(value))
