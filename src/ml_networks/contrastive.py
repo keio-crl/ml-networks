@@ -259,6 +259,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
             If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
         """
         loss_dict: Dict[str, torch.Tensor] = {}
+        batch_shape = feature1.shape[:-1]
         emb_1 = self.eval_func(feature1.reshape(-1, self.dim_input1))
         emb_2 = self.eval_func2(feature2.reshape(-1, self.dim_input2))
 
@@ -276,7 +277,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
             loss_dict["negative"] = negative.detach().clone().mean()
 
             nce_loss = -positive + negative
-            loss_dict["nce"] = nce_loss
+            loss_dict["nce"] = nce_loss.reshape(batch_shape)
 
         if return_emb:
             return loss_dict, (emb_1, emb_2)
