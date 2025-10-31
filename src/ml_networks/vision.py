@@ -477,7 +477,7 @@ class ViT(nn.Module):
                 patch_size=self.patch_size,
                 obs_shape=in_shape,
             )
-        self.should_unpatchify = self.unpatchify
+        self.should_unpatchify = cfg.unpatchify
         if cfg.cls_token:
             self.cls_token = nn.Parameter(torch.randn(1, 1, self.in_patch_dim))
         self.last_channel = self.get_n_patches(in_shape) 
