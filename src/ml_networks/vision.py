@@ -485,7 +485,7 @@ class ViT(nn.Module):
         self,
         x: torch.Tensor,
         return_cls_token: bool = False,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        ) -> torch.Tensor: 
         """
         Forward pass.
 
@@ -515,7 +515,7 @@ class ViT(nn.Module):
             x = x[:, 1:]
         x = self.unpatchify(x)
         if return_cls_token and hasattr(self, "cls_token"):
-            return x, cls_token
+            return cls_token
         return x
 
     def patchify(self, imgs: torch.Tensor) -> torch.Tensor:
