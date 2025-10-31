@@ -473,6 +473,7 @@ class ViTConfig:
     transformer_cfg: TransformerConfig
     cls_token: bool = True
     init_channel: int = 16
+    unpatchify: bool = False
 
 @dataclass
 class AdaptiveAveragePoolingConfig:
