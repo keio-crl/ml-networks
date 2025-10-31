@@ -479,7 +479,7 @@ class ViT(nn.Module):
             )
         if cfg.cls_token:
             self.cls_token = nn.Parameter(torch.randn(1, 1, self.in_patch_dim))
-        self.last_channel = self.out_patch_dim // (self.patch_size**2)
+        self.last_channel = self.get_n_patches(in_shape) 
 
     def forward(
         self,
@@ -564,7 +564,7 @@ class ViT(nn.Module):
 
     @property
     def conved_shape(self) -> tuple[int, int]:
-        return (self.in_shape[1] // self.patch_size, self.in_shape[2] // self.patch_size)
+        return (self.out_patch_dim, )
 
     def get_n_patches(self, obs_shape: tuple[int, int, int]) -> int:
         return (obs_shape[1] // self.patch_size) * (obs_shape[2] // self.patch_size)
