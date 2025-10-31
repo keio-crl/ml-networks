@@ -550,7 +550,8 @@ class EncoderConfig:
         dict
             Dictionary representation of EncoderConfig.
         """
-        self.backbone.dictcfg2dict()
+        if hasattr(self.backbone, "dictcfg2dict"):
+            self.backbone.dictcfg2dict()
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
