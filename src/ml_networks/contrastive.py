@@ -316,7 +316,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
 
         logits = torch.matmul(emb_1, emb_2.T) * temprature + bias
         labels = torch.eye(len(logits), device=logits.device) * 2 - 1
-        loss = -F.logsigmoid(logits * labels).mean(-1)
+        loss = -F.logsigmoid(logits * labels).sum(-1)
         loss_dict["sigmoid"] = loss.reshape(batch_shape)
         if return_emb:
             return loss_dict, (emb_1, emb_2)
