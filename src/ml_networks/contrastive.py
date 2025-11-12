@@ -234,6 +234,55 @@ class ContrastiveLearningLoss(pl.LightningModule):
             tgt_positive.append(tgt_pos)
         return torch.stack(tgt_positive)
 
+    def calc_nce(
+        self,
+        feature1: torch.Tensor,
+        feature2: torch.Tensor,
+        return_emb: bool = False,
+    ) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
+        """
+        Calculate the Noise Contrastive Estimation (NCE) loss.
+
+        Parameters
+        ----------
+        feature1 : torch.Tensor
+            First input tensor of shape (*, dim_input1)
+        feature2 : torch.Tensor
+            Second input tensor of shape (*, dim_input2)
+        return_emb : bool, optional
+            Whether to return embeddings, by default False
+
+        Returns
+        -------
+        Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
+            If return_emb is False, returns loss dictionary.
+            If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
+        """
+        loss_dict: Dict[str, torch.Tensor] = {}
+        batch_shape = feature1.shape[:-1]
+        emb_1 = self.eval_func(feature1.reshape(-1, self.dim_input1))
+        emb_2 = self.eval_func2(feature2.reshape(-1, self.dim_input2))
+
+        if self.is_ce_like:
+            labels = torch.arange(len(emb_1), device=emb_1.device)
+            sim_matrix = torch.mm(emb_1, emb_2.T)
+            nce_loss = F.cross_entropy(sim_matrix, labels, reduction="none") - np.log(len(sim_matrix))
+            loss_dict["nce"] = nce_loss
+        else:
+            positive = torch.sum(emb_1 * emb_2, dim=-1)
+            loss_dict["positive"] = positive.detach().clone().mean()
+
+            sim_matrix = torch.mm(emb_1, emb_2.T)
+            negative = torch.logsumexp(sim_matrix, dim=-1) - np.log(len(sim_matrix))
+            loss_dict["negative"] = negative.detach().clone().mean()
+
+            nce_loss = -positive + negative
+            loss_dict["nce"] = nce_loss.reshape(batch_shape)
+
+        if return_emb:
+            return loss_dict, (emb_1, emb_2)
+        return loss_dict
+
     def calc_sigmoid(
         self,
         feature1: torch.Tensor,
@@ -269,11 +318,10 @@ class ContrastiveLearningLoss(pl.LightningModule):
         labels = torch.eye(len(logits), device=logits.device) * 2 - 1
         loss = -F.logsigmoid(logits * labels).mean(-1)
         loss_dict["sigmoid"] = loss.reshape(batch_shape)
-
-
         if return_emb:
             return loss_dict, (emb_1, emb_2)
         return loss_dict
+
 
 
 if __name__ == "__main__":
