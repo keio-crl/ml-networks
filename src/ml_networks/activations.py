@@ -25,12 +25,30 @@ class Activation(nn.Module):
                 self.activation = SiGLU(**kwargs)
             elif activation == "CRReLU":
                 self.activation = CRReLU(**kwargs)
+            elif activation == "L2Norm":
+                self.activation = L2Norm()
             else:
                 msg = f"Activation: '{activation}' is not implemented yet."
                 raise NotImplementedError(msg) from err
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.activation(x)
+
+class L2Norm(nn.Module):
+    """
+    L2 Normalization layer.
+
+    Examples
+    --------
+    >>> l2norm = L2Norm()
+    >>> x = torch.randn(2, 3)
+    >>> output = l2norm(x)
+    >>> output.shape
+    torch.Size([2, 3])
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.normalize(x, p=2, dim=-1)
 
 
 class REReLU(nn.Module):
