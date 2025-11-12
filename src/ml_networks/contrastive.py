@@ -243,7 +243,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         bias: Union[float, torch.Tensor] = 0.0,
     ) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
         """
-        Calculate the Noise Contrastive Estimation (NCE) loss.
+        Calculate the Sigmoid loss for contrastive learning.
 
         Parameters
         ----------
