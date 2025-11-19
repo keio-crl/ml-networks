@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Literal
+from copy import deepcopy
 
 import numpy as np
 import pytorch_lightning as pl
@@ -244,7 +245,7 @@ class MLPLayer(pl.LightningModule):
         cfg: MLPConfig,
     ) -> None:
         super().__init__()
-        self.cfg = cfg
+        self.cfg = deepcopy(cfg)
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hidden_dim = cfg.hidden_dim
