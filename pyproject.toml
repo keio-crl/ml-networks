@@ -27,10 +27,20 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "codespell>=2.4.1",
     "ipython<=8.33.0",
     "mypy>=1.10.0",
+    "pre-commit>=3.5.0",
+    "pytest>=8.3.5",
     "pytest-cov<=6.0.0",
     "ruff>=0.9.10",
+    "types-pyserial>=3.5.0.20241221",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-git-revision-date-localized-plugin>=1.4.7",
+    "mkdocs-material>=9.7.1",
+    "mkdocstrings[python]>=0.26.1",
 ]
 
 [tool.mypy]

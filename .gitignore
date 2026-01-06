@@ -1,14 +1,74 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.pyc
+*.pyo
+*.pyd
+.Python
 build/
 dist/
 wheels/
 *.egg-info
+*.egg
+*.so
+*.dylib
 
 # Virtual environments
 .venv
+venv/
+ENV/
+env/
+.ENV
 
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-# data
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Data files
 **/*.blosc2
+*.h5
+*.hdf5
+
+# Logs
+*.log
+logs/
+
+# Reports (keep directory structure but ignore data files)
+reports/*.blosc2
+reports/*.png
+reports/*.jpg
+reports/*.jpeg
+
+# Lock files (optional - uncomment if you want to ignore)
+# uv.lock

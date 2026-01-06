@@ -1,32 +1,51 @@
 # ml-networks
 
+村田研共通フレームワーク化計画の一環として，基本的な深層学習モデルのアーキテクチャを提供するPythonパッケージです．
 
-こちらは 村田研共通フレームワーク化計画の一環として，基本的な深層学習モデルのアーキテクチャを提供するリポジトリです．
+## 概要
 
-## Installation
-以下のようなコマンドでインストールが可能です．  
-（※3つの内どれか一つでOK）
+`ml-networks`は、PyTorchベースの深層学習モデル構築を支援するライブラリです。以下の機能を提供します：
+
+- **基本的なニューラルネットワークアーキテクチャ**: MLP、Encoder、Decoder、UNetなど
+- **分布のサポート**: 正規分布、カテゴリカル分布、ベルヌーイ分布
+- **損失関数**: Focal Loss、Charbonnier Loss、Focal Frequency Lossなど
+- **便利なユーティリティ**: 活性化関数、最適化手法、データ保存・読み込み機能
+
+## インストール
+
+### 要件
+
+- Python >= 3.8
+- PyTorch >= 2.0
+
+### インストール方法
+
+以下のいずれかの方法でインストールできます：
+
+#### pipを使用する場合
 
 ```bash
 pip install https://github.com/keio-crl/ml-networks.git
 ```
 
+#### ryeを使用する場合
+
 ```bash
 rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
 ```
 
+#### uvを使用する場合
+
 ```bash
-uv add "git+https://<access token>@github.com/keio-crl/ml-networks.git"
+uv add https://github.com/keio-crl/ml-networks.git
 ```
 
-install時はアカウント名とパスワードが求められる場合があります．  
-その場合は，アカウント名にはkeio-crlに登録されているユーザーネーム，パスワードにはトークンを入力してください．  
-トークンの取得方法は[こちら](https://docs.github.com/ja/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)を参照してください．  
-※ uv の場合はアクセストークンが必ず必要です．<access token> を置き換えてください．
+**注意**: uvを使用する場合は、`<access token>`をGitHubのPersonal Access Tokenに置き換えてください。
 
-## Usage
-主要なものたちを以下に示します．  
-詳細な説明は[こちら](https://github.com/keio-crl/ml-networks.git)(in coming).
+## 使用方法
+
+主要な機能の使用例を以下に示します。  
+詳細なドキュメントは準備中です。
 
 ### 目次
 1. [MLP](#MLP)
@@ -548,3 +567,118 @@ loader = determine_loader(
     collate_fn=None, # 特定のミニバッチ作成処理がある場合は指定する．
 )
 ```
+
+## 開発
+
+### 開発環境のセットアップ
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/keio-crl/ml-networks.git
+cd ml-networks
+
+# 開発用依存関係をインストール
+pip install -e ".[dev]"
+```
+
+### コード品質チェック
+
+```bash
+# リンターの実行
+ruff check .
+
+# 型チェック
+mypy src/
+
+# フォーマット
+ruff format .
+```
+
+## バージョン管理
+
+このプロジェクトでは、セマンティックバージョニング（Semantic Versioning）を使用しています。
+
+### バージョンの形式
+
+バージョンは `MAJOR.MINOR.PATCH` の形式で管理されています：
+- **MAJOR**: 互換性のない変更がある場合
+- **MINOR**: 後方互換性を保った機能追加の場合
+- **PATCH**: 後方互換性を保ったバグ修正の場合
+
+### バージョンの更新方法
+
+#### 方法1: スクリプトを使用（推奨）
+
+```bash
+# パッチバージョンを上げる (0.1.0 -> 0.1.1)
+python scripts/bump_version.py patch
+
+# マイナーバージョンを上げる (0.1.0 -> 0.2.0)
+python scripts/bump_version.py minor
+
+# メジャーバージョンを上げる (0.1.0 -> 1.0.0)
+python scripts/bump_version.py major
+```
+
+スクリプト実行後、以下の手順でリリースします：
+
+```bash
+# 変更を確認
+git diff pyproject.toml
+
+# コミット
+git add pyproject.toml
+git commit -m "Bump version to X.Y.Z"
+
+# タグを作成
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+
+# プッシュ
+git push origin main
+git push origin vX.Y.Z
+```
+
+#### 方法2: GitHub Actionsを使用
+
+1. GitHubリポジトリの「Actions」タブに移動
+2. 「Version Bump」ワークフローを選択
+3. 「Run workflow」をクリック
+4. バージョンタイプ（patch/minor/major）を選択
+5. タグを作成するかどうかを選択
+6. ワークフローを実行
+
+### リリースプロセス
+
+1. **バージョンを更新**: 上記の方法でバージョンを更新
+2. **タグを作成**: `vX.Y.Z` の形式でタグを作成
+3. **自動リリース**: タグをプッシュすると、GitHub Actionsが自動的に：
+   - パッケージをビルド
+   - リリースノートを生成
+   - GitHub Releaseを作成
+
+### CI/CD
+
+このプロジェクトでは、以下のGitHub Actionsワークフローが設定されています：
+
+- **CI**: プッシュ/プルリクエスト時に自動実行
+  - リントチェック（ruff）
+  - 型チェック（mypy）
+  - テスト実行（pytest）
+  - パッケージビルド確認
+
+- **Release**: タグがプッシュされたときに自動実行
+  - パッケージのビルド
+  - GitHub Releaseの作成
+
+## ライセンス
+
+このプロジェクトのライセンス情報については、リポジトリのLICENSEファイルを参照してください。
+
+## コントリビューション
+
+コントリビューションを歓迎します。プルリクエストを送信する前に、コード品質チェックを実行してください。
+
+## 作者
+
+- oakwood-fujiken (oakwood.n14.4sp@keio.jp)
+- nomutin (nomura0508@icloud.com)
