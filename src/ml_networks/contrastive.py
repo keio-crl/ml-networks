@@ -1,13 +1,13 @@
+"""コントラスティブ学習を扱うモジュール."""
+
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Tuple, Union, Optional
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from torch import nn
 
-from ml_networks.config import ContrastiveLearningConfig, MLPConfig, LinearConfig
+from ml_networks.config import ContrastiveLearningConfig
 from ml_networks.layers import MLPLayer
 
 
@@ -57,8 +57,8 @@ class ContrastiveLearningLoss(pl.LightningModule):
         self,
         dim_input1: int,
         dim_input2: int,
-        cfg: ContrastiveLearningConfig
-        ) -> None:
+        cfg: ContrastiveLearningConfig,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.dim_feature = cfg.dim_feature
@@ -79,7 +79,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         positive_range_self: int = 0,
         positive_range_tgt: int = 0,
         return_emb: bool = False,
-    ) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """
         Calculate the Noise Contrastive Estimation (NCE) loss for time series data.
 
@@ -98,7 +98,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
 
         Returns
         -------
-        Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
+        Union[dict[str, torch.Tensor], Tuple[dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
             If return_emb is False, returns loss dictionary.
             If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
         """
@@ -115,7 +115,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         emb_2 = self.eval_func2(feature2)
 
         # Initialize loss dictionary
-        loss_dict: Dict[str, torch.Tensor] = {}
+        loss_dict: dict[str, torch.Tensor] = {}
 
         # Calculate positive pairs
         positive = torch.sum(emb_1.flatten(0, 1) * emb_2.flatten(0, 1), dim=-1)  # (batch*length)
@@ -124,7 +124,11 @@ class ContrastiveLearningLoss(pl.LightningModule):
         # Calculate self-positive pairs if needed
         if positive_range_self > 0:
             self_positive_1, self_positive_2 = self._calculate_self_positive_pairs(
-                emb_1, emb_2, batch, length, positive_range_self
+                emb_1,
+                emb_2,
+                batch,
+                length,
+                positive_range_self,
             )
             positive += self_positive_1.flatten(0, 1) + self_positive_2.flatten(0, 1)
             loss_dict["self_positive_1"] = self_positive_1.detach().clone().mean()
@@ -133,7 +137,11 @@ class ContrastiveLearningLoss(pl.LightningModule):
         # Calculate target-positive pairs if needed
         if positive_range_tgt > 0:
             tgt_positive = self._calculate_target_positive_pairs(
-                emb_1, emb_2, batch, length, positive_range_tgt
+                emb_1,
+                emb_2,
+                batch,
+                length,
+                positive_range_tgt,
             )
             positive += tgt_positive.flatten(0, 1)
             loss_dict["tgt_positive"] = tgt_positive.detach().clone().mean()
@@ -159,7 +167,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         batch: int,
         length: int,
         positive_range: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate self-positive pairs for time series data.
 
@@ -185,12 +193,12 @@ class ContrastiveLearningLoss(pl.LightningModule):
         self_positive_2 = []
         for i in range(batch):
             self_pos_1 = torch.stack([
-                torch.mm(emb_1[i], emb_1[i].T)[j, j-positive_range:j+positive_range+1].mean()
+                torch.mm(emb_1[i], emb_1[i].T)[j, j - positive_range : j + positive_range + 1].mean()
                 for j in range(length)
             ])
             self_positive_1.append(self_pos_1)
             self_pos_2 = torch.stack([
-                torch.mm(emb_2[i], emb_2[i].T)[j, j-positive_range:j+positive_range+1].mean()
+                torch.mm(emb_2[i], emb_2[i].T)[j, j - positive_range : j + positive_range + 1].mean()
                 for j in range(length)
             ])
             self_positive_2.append(self_pos_2)
@@ -228,7 +236,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         tgt_positive = []
         for i in range(batch):
             tgt_pos = torch.stack([
-                torch.mm(emb_1[i], emb_2[i].T)[j, j-positive_range:j+positive_range+1].mean()
+                torch.mm(emb_1[i], emb_2[i].T)[j, j - positive_range : j + positive_range + 1].mean()
                 for j in range(length)
             ])
             tgt_positive.append(tgt_pos)
@@ -239,7 +247,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         feature1: torch.Tensor,
         feature2: torch.Tensor,
         return_emb: bool = False,
-    ) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """
         Calculate the Noise Contrastive Estimation (NCE) loss.
 
@@ -254,11 +262,11 @@ class ContrastiveLearningLoss(pl.LightningModule):
 
         Returns
         -------
-        Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
+        Union[dict[str, torch.Tensor], Tuple[dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
             If return_emb is False, returns loss dictionary.
             If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
         """
-        loss_dict: Dict[str, torch.Tensor] = {}
+        loss_dict: dict[str, torch.Tensor] = {}
         batch_shape = feature1.shape[:-1]
         emb_1 = self.eval_func(feature1.reshape(-1, self.dim_input1))
         emb_2 = self.eval_func2(feature2.reshape(-1, self.dim_input2))
@@ -288,9 +296,9 @@ class ContrastiveLearningLoss(pl.LightningModule):
         feature1: torch.Tensor,
         feature2: torch.Tensor,
         return_emb: bool = False,
-        temprature: Union[float, torch.Tensor] = 0.1,
-        bias: Union[float, torch.Tensor] = 0.0,
-    ) -> Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
+        temperature: float | torch.Tensor = 0.1,
+        bias: float | torch.Tensor = 0.0,
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """
         Calculate the Sigmoid loss for contrastive learning.
 
@@ -305,16 +313,16 @@ class ContrastiveLearningLoss(pl.LightningModule):
 
         Returns
         -------
-        Union[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
+        Union[dict[str, torch.Tensor], Tuple[dict[str, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]
             If return_emb is False, returns loss dictionary.
             If return_emb is True, returns (loss dictionary, (embeddings1, embeddings2))
         """
-        loss_dict: Dict[str, torch.Tensor] = {}
+        loss_dict: dict[str, torch.Tensor] = {}
         batch_shape = feature1.shape[:-1]
         emb_1 = self.eval_func(feature1.reshape(-1, self.dim_input1))
         emb_2 = self.eval_func2(feature2.reshape(-1, self.dim_input2))
 
-        logits = torch.matmul(emb_1, emb_2.T) * temprature + bias
+        logits = torch.matmul(emb_1, emb_2.T) * temperature + bias
         labels = torch.eye(len(logits), device=logits.device) * 2 - 1
         loss = -F.logsigmoid(logits * labels).sum(-1)
         loss_dict["sigmoid"] = loss.reshape(batch_shape)
@@ -323,13 +331,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         return loss_dict
 
 
-
 if __name__ == "__main__":
     import doctest
 
     doctest.testmod()
-    
-
-
-
-

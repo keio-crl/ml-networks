@@ -1,17 +1,27 @@
+"""レイヤーを扱うモジュール."""
+
 from __future__ import annotations
-from typing import Any, Literal
+
 from copy import deepcopy
+from typing import Any, Literal
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 from torch import nn
 from torchgeometry.contrib.spatial_soft_argmax2d import create_meshgrid, spatial_soft_argmax2d
-from einops import rearrange
 
 from ml_networks.activations import Activation
-from ml_networks.config import ConvConfig, LinearConfig, MLPConfig, SpatialSoftmaxConfig, TransformerConfig, AttentionConfig
+from ml_networks.config import (
+    AttentionConfig,
+    ConvConfig,
+    LinearConfig,
+    MLPConfig,
+    SpatialSoftmaxConfig,
+    TransformerConfig,
+)
 
 
 def get_norm(
@@ -132,7 +142,7 @@ class LinearNormActivation(nn.Module):
     ...     bias=True
     ... )
     >>> linear = LinearNormActivation(32, 16, cfg)
-    >>> # If actication includes "glu", linear output_dim is doubled to adjust actual output_dim.
+    >>> # If activation includes "glu", linear output_dim is doubled to adjust actual output_dim.
     >>> linear
     LinearNormActivation(
       (linear): Linear(in_features=32, out_features=32, bias=True)
@@ -163,7 +173,7 @@ class LinearNormActivation(nn.Module):
             bias=cfg.bias,
         )
         if cfg.norm_first:
-            normalized_shape = input_dim 
+            normalized_shape = input_dim
         else:
             normalized_shape = output_dim * 2 if "glu" in cfg.activation.lower() else output_dim
 
@@ -422,14 +432,17 @@ class ConvNormActivation(nn.Module):
             dilation=cfg.dilation,
             groups=cfg.groups,
             bias=cfg.bias,
-            padding_mode=cfg.padding_mode
+            padding_mode=cfg.padding_mode,
         )
         if cfg.norm != "none" and cfg.norm != "group":
             cfg.norm_cfg["num_features"] = out_channels_
         elif cfg.norm == "group":
             cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
-        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
+            "batch2d" if cfg.norm == "batch" else cfg.norm
+        )  # type: ignore[assignment]
+        self.norm = get_norm(norm_type, **cfg.norm_cfg)
         if cfg.scale_factor > 0:
             self.pixel_shuffle = nn.PixelShuffle(cfg.scale_factor)
         elif cfg.scale_factor < 0:
@@ -473,6 +486,7 @@ class ConvNormActivation(nn.Module):
             x = self.activation(x)
             x = self.dropout(x)
         return x
+
 
 class ConvNormActivation1d(nn.Module):
     """
@@ -551,7 +565,7 @@ class ConvNormActivation1d(nn.Module):
             dilation=cfg.dilation,
             groups=cfg.groups,
             bias=cfg.bias,
-            padding_mode=cfg.padding_mode
+            padding_mode=cfg.padding_mode,
         )
         if cfg.norm != "none" and cfg.norm != "group":
             cfg.norm_cfg["num_features"] = out_channels_
@@ -565,7 +579,10 @@ class ConvNormActivation1d(nn.Module):
         else:
             self.horizontal_shuffle = nn.Identity()
 
-        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
+            "batch1d" if cfg.norm == "batch" else cfg.norm
+        )  # type: ignore[assignment]
+        self.norm = get_norm(norm_type, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-2)
         self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
         self.norm_first = cfg.norm_first
@@ -602,7 +619,6 @@ class ConvNormActivation1d(nn.Module):
         return x
 
 
-
 class ResidualBlock(nn.Module):
     """
     Residual block.
@@ -617,7 +633,7 @@ class ResidualBlock(nn.Module):
         Activation function.
     norm : Literal["batch", "group", "none"]
         Normalization layer. If it's set to "none", normalization is not applied. Default is "none".
-    norm_cfg : DictConfig
+    norm_cfg : dictConfig
         Normalization layer configuration. Default is {}.
     dropout : float
         Dropout rate. If it's set to 0.0, dropout is not applied. Default is 0.0.
@@ -776,7 +792,10 @@ class ConvTransposeNormActivation(nn.Module):
             cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
             cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
-        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
+            "batch2d" if cfg.norm == "batch" else cfg.norm
+        )  # type: ignore[assignment]
+        self.norm = get_norm(norm_type, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-3)
         self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
@@ -801,6 +820,7 @@ class ConvTransposeNormActivation(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         return self.dropout(x)
+
 
 class ConvTransposeNormActivation1d(nn.Module):
     """
@@ -853,7 +873,7 @@ class ConvTransposeNormActivation1d(nn.Module):
     >>> output = conv(x)
     >>> output.shape
     torch.Size([1, 16, 32])
-    
+
     """
 
     def __init__(
@@ -873,13 +893,16 @@ class ConvTransposeNormActivation1d(nn.Module):
             output_padding=cfg.output_padding,
             groups=cfg.groups,
             bias=cfg.bias,
-            dilation=cfg.dilation
+            dilation=cfg.dilation,
         )
         if cfg.norm not in {"none", "group"}:
             cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
             cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
-        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
+            "batch1d" if cfg.norm == "batch" else cfg.norm
+        )  # type: ignore[assignment]
+        self.norm = get_norm(norm_type, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-2)
         self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
@@ -903,6 +926,7 @@ class ConvTransposeNormActivation1d(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         return self.dropout(x)
+
 
 class TransformerLayer(nn.Module):
     """
@@ -1137,8 +1161,9 @@ class PatchEmbed(nn.Module):
         # 軸の入れ替え (B, D, Np) -> (B, Np, D)
         return x.transpose(1, 2)
 
+
 class Attention2d(nn.Module):
-    """2d自己注意機構。
+    """2d自己注意機構.
 
     Args:
         channels (int): 入力・出力チャンネル数
@@ -1152,13 +1177,14 @@ class Attention2d(nn.Module):
     >>> out.shape
     torch.Size([2, 64, 32, 32])
     """
+
     def __init__(
         self,
         channels: int,
-        nhead: int = None,
+        nhead: int | None = None,
         patch_size: int = 1,
-        attn_cfg: AttentionConfig = None
-    ):
+        attn_cfg: AttentionConfig | None = None,
+    ) -> None:
         super().__init__()
         self.channels = channels
         if nhead is None or patch_size is None:
@@ -1168,9 +1194,7 @@ class Attention2d(nn.Module):
         else:
             self.n_heads = nhead
             self.patch_size = patch_size
-        assert (
-            channels % self.n_heads == 0
-        ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
+        assert channels % self.n_heads == 0, f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
         cfg = ConvConfig(
             kernel_size=1,
             padding=0,
@@ -1183,28 +1207,39 @@ class Attention2d(nn.Module):
         self.qkv = ConvNormActivation(channels, channels * 3, first_cfg)
 
         self.proj_out = ConvNormActivation(
-            channels, channels, cfg
+            channels,
+            channels,
+            cfg,
         )
 
-    def qkv_attn(self, qkv):
+    def qkv_attn(self, qkv: torch.Tensor) -> torch.Tensor:
         """Apply QKV attention.
 
-        :param qkv: an [N x (Heads * 3 * C) x H x W] tensor of query, key, value. 
-        :return: an [N x (C * Head) x H x W] tensor of attended values.
+        Parameters
+        ----------
+        qkv : torch.Tensor
+            An [N x (Heads * 3 * C) x H x W] tensor of query, key, value.
+
+        Returns
+        -------
+        torch.Tensor
+            An [N x (C * Head) x H x W] tensor of attended values.
         """
         bs, channels, height, width = qkv.shape
         assert channels % (3 * self.n_heads) == 0
         ch = channels // (3 * self.n_heads)
-        q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, height*width).split(ch, dim=1)
+        q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, height * width).split(ch, dim=1)
         scale = 1 / np.sqrt(np.sqrt(ch))
         weight = torch.einsum(
-            "bct,bcs->bts", q * scale, k * scale
+            "bct,bcs->bts",
+            q * scale,
+            k * scale,
         )  # More stable with f16 than dividing afterwards
         weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, height, width)
 
-    def forward(self, x, *args):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, *spatial = x.shape
         qkv = self.qkv(x)
         qkv = rearrange(qkv, "b c (h p1) (w p2) -> b (c p1 p2) h w", p1=self.patch_size, p2=self.patch_size)
@@ -1213,14 +1248,17 @@ class Attention2d(nn.Module):
         h = self.proj_out(h)
         return (x + h).reshape(b, c, *spatial)
 
+
 class Attention1d(nn.Module):
+    """1d自己注意機構."""
+
     def __init__(
         self,
         channels: int,
-        nhead: int = None,
+        nhead: int | None = None,
         patch_size: int = 1,
-        attn_cfg: AttentionConfig = None
-    ):
+        attn_cfg: AttentionConfig | None = None,
+    ) -> None:
         super().__init__()
         self.channels = channels
         if nhead is None:
@@ -1230,9 +1268,7 @@ class Attention1d(nn.Module):
         else:
             self.n_heads = nhead
             self.patch_size = patch_size
-        assert (
-            channels % self.n_heads == 0
-        ), f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
+        assert channels % self.n_heads == 0, f"q,k,v channels {channels} is not divisible by num_head_channels {nhead}"
         cfg = ConvConfig(
             kernel_size=1,
             padding=0,
@@ -1245,14 +1281,23 @@ class Attention1d(nn.Module):
         self.qkv = ConvNormActivation1d(channels, channels * 3, first_cfg)
 
         self.proj_out = ConvNormActivation1d(
-            channels, channels, cfg
+            channels,
+            channels,
+            cfg,
         )
 
-    def qkv_attention(self, qkv):
+    def qkv_attention(self, qkv: torch.Tensor) -> torch.Tensor:
         """Apply QKV attention.
 
-        :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
-        :return: an [N x (H * C) x T] tensor after attention.
+        Parameters
+        ----------
+        qkv : torch.Tensor
+            An [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
+
+        Returns
+        -------
+        torch.Tensor
+            An [N x (H * C) x T] tensor after attention.
         """
         bs, width, length = qkv.shape
         assert width % (3 * self.n_heads) == 0
@@ -1260,13 +1305,15 @@ class Attention1d(nn.Module):
         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
         scale = 1 / np.sqrt(np.sqrt(ch))
         weight = torch.einsum(
-            "bct,bcs->bts", q * scale, k * scale
+            "bct,bcs->bts",
+            q * scale,
+            k * scale,
         )  # More stable with f16 than dividing afterwards
         weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, length)
 
-    def forward(self, x, *args):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)
         qkv = self.qkv(x)
@@ -1310,8 +1357,7 @@ class SpatialSoftmax(nn.Module):
             self.spatial_softmax = spatial_soft_argmax2d
 
     def spatial_softmax_straight_through(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Spatial Softmax and Argmax layer.
+        """Spatial Softmax and Argmax layer.
 
         Parameters
         ----------
@@ -1322,19 +1368,26 @@ class SpatialSoftmax(nn.Module):
         -------
         torch.Tensor
             Spatial Softmaxを適用した特徴量。形状は、(B, N, 2)。
+
+        Raises
+        ------
+        TypeError
+            If input is not a torch.Tensor.
+        ValueError
+            If input shape is not 4D.
         """
         if not torch.is_tensor(x):
-            raise TypeError("Input input type is not a torch.Tensor. Got {}"
-                            .format(type(input)))
-        if not len(x.shape) == 4:
-            raise ValueError("Invalid input shape, we expect BxCxHxW. Got: {}"
-                             .format(x.shape))
+            msg = f"Input input type is not a torch.Tensor. Got {type(x)}"
+            raise TypeError(msg)
+        if len(x.shape) != 4:
+            msg = f"Invalid input shape, we expect BxCxHxW. Got: {x.shape}"
+            raise ValueError(msg)
         # unpack shapes and create view from input tensor
-        batch_size, channels, height, width = x.shape
+        batch_size, channels, _height, _width = x.shape
         pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         x = x.view(batch_size, channels, -1)
 
-        # compute softmax with max substraction trick
+        # compute softmax with max subtraction  trick
         exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
         exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
         softmax_x = exp_x * exp_x_sum
@@ -1347,17 +1400,13 @@ class SpatialSoftmax(nn.Module):
         pos_y = pos_y.reshape(-1)
 
         # compute the expected coordinates
-        expected_y = torch.sum(
-            pos_y * softmax_x, dim=-1, keepdim=True)
-        expected_x = torch.sum(
-            pos_x * softmax_x, dim=-1, keepdim=True)
+        expected_y = torch.sum(pos_y * softmax_x, dim=-1, keepdim=True)
+        expected_x = torch.sum(pos_x * softmax_x, dim=-1, keepdim=True)
         output = torch.cat([expected_x, expected_y], dim=-1)
         return output.view(batch_size, channels, 2)  # BxNx2
 
-
     def spatial_argmax2d(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Spatial Softmax and Argmax layer.
+        """Spatial Softmax and Argmax layer.
 
         Parameters
         ----------
@@ -1368,19 +1417,26 @@ class SpatialSoftmax(nn.Module):
         -------
         torch.Tensor
             Spatial Softmaxを適用した特徴量。形状は、(B, N, 2)。
+
+        Raises
+        ------
+        TypeError
+            If input is not a torch.Tensor.
+        ValueError
+            If input shape is not 4D.
         """
         if not torch.is_tensor(x):
-            raise TypeError("Input input type is not a torch.Tensor. Got {}"
-                            .format(type(input)))
-        if not len(x.shape) == 4:
-            raise ValueError("Invalid input shape, we expect BxCxHxW. Got: {}"
-                             .format(x.shape))
+            msg = f"Input input type is not a torch.Tensor. Got {type(x)}"
+            raise TypeError(msg)
+        if len(x.shape) != 4:
+            msg = f"Invalid input shape, we expect BxCxHxW. Got: {x.shape}"
+            raise ValueError(msg)
         # unpack shapes and create view from input tensor
-        batch_size, channels, height, width = x.shape
+        batch_size, channels, _height, _width = x.shape
         pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         x = x.view(batch_size, channels, -1)
 
-        # compute softmax with max substraction trick
+        # compute softmax with max subtraction  trick
         exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
         exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
         softmax_x = exp_x * exp_x_sum
@@ -1395,13 +1451,10 @@ class SpatialSoftmax(nn.Module):
         pos_y = pos_y.reshape(-1)
 
         # compute the expected coordinates
-        expected_y = torch.sum(
-            pos_y * argmax_x, dim=-1, keepdim=True)
-        expected_x = torch.sum(
-            pos_x * argmax_x, dim=-1, keepdim=True)
+        expected_y = torch.sum(pos_y * argmax_x, dim=-1, keepdim=True)
+        expected_x = torch.sum(pos_x * argmax_x, dim=-1, keepdim=True)
         output = torch.cat([expected_x, expected_y], dim=-1)
         return output.view(batch_size, channels, 2)  # BxNx2
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -1416,8 +1469,8 @@ class SpatialSoftmax(nn.Module):
         -------
             Spatial Softmaxを適用した特徴量。形状は、(B, N, D)。
         """
-        x = self.spatial_softmax(x/self.temperature)
-        return x
+        return self.spatial_softmax(x / self.temperature)
+
 
 class HorizonShuffle(nn.Module):
     """Horizon Shuffle Layer.
@@ -1433,21 +1486,25 @@ class HorizonShuffle(nn.Module):
     >>> out.shape
     torch.Size([2, 32, 100])
     """
-    def __init__(self, upscale_factor: int = 2):
+
+    def __init__(self, upscale_factor: int = 2) -> None:
         super().__init__()
         self.upscale_factor = upscale_factor
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Horizon Shuffle Layer.
+
         Args:
             x (torch.Tensor): 入力テンソル (B, C, T)
-        Returns:
+
+        Returns
+        -------
             torch.Tensor: 出力テンソル (B, C // upscale_factor, T * upscale_factor)
         """
-        b, c, t = x.shape
+        _b, c, _t = x.shape
         assert c % self.upscale_factor == 0, "Input length must be divisible by upscale_factor."
-        x = rearrange(x, 'b (c u) t -> b c (t u)', u=self.upscale_factor)
-        return x
+        return rearrange(x, "b (c u) t -> b c (t u)", u=self.upscale_factor)
+
 
 class HorizonUnShuffle(nn.Module):
     """Horizon UnShuffle Layer.
@@ -1463,21 +1520,24 @@ class HorizonUnShuffle(nn.Module):
     >>> out.shape
     torch.Size([2, 64, 50])
     """
-    def __init__(self, downscale_factor: int = 2):
+
+    def __init__(self, downscale_factor: int = 2) -> None:
         super().__init__()
         self.downscale_factor = downscale_factor
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Horizon UnShuffle Layer.
+
         Args:
             x (torch.Tensor): 入力テンソル (B, C // upscale_factor, T * upscale_factor)
-        Returns:
+
+        Returns
+        -------
             torch.Tensor: 出力テンソル (B, C, T)
         """
-        b, c, t = x.shape
+        _b, _c, t = x.shape
         assert t % self.downscale_factor == 0, "Input length must be divisible by upscale_factor."
-        x = rearrange(x, 'b c (t u) -> b (c u) t', u=self.downscale_factor)
-        return x
+        return rearrange(x, "b c (t u) -> b (c u) t", u=self.downscale_factor)
 
 
 if __name__ == "__main__":

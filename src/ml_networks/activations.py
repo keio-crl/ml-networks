@@ -1,6 +1,8 @@
-from __future__ import annotations
-from typing import Any
+"""活性化関数を扱うモジュール."""
 
+from __future__ import annotations
+
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -33,6 +35,7 @@ class Activation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.activation(x)
+
 
 class L2Norm(nn.Module):
     """

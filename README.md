@@ -44,7 +44,7 @@ uv add https://github.com/keio-crl/ml-networks.git
 
 ## 使用方法
 
-主要な機能の使用例を以下に示します。  
+主要な機能の使用例を以下に示します。
 詳細なドキュメントは準備中です。
 
 ### 目次
@@ -104,11 +104,11 @@ from ml_networks import (Encoder, ConvNetConfig,
 画像のDownsampling処理を行うアーキテクチャを変えたい場合は引数に渡すConfigを変える
 
 ```python
- 
+
 # 多層CNNのエンコーダ
 encoder_cfg = ConvNetConfig(
     channels=[16, 32, 64], # 各層のchannel数．最初から順に入力（画像）に近い層のchannel数を指定．
-                           # ここの数はconv_cfgsの数と一致している必要がある． 
+                           # ここの数はconv_cfgsの数と一致している必要がある．
     conv_cfgs=[
         ConvConfig(
             kernel_size=3, # カーネルサイズ
@@ -176,7 +176,7 @@ full_connection_cfg = LinearConfig(
 
 # SpatialSoftmaxを使う場合は以下のように設定する
 full_connection_cfg = SpatialSoftmaxConfig(
-    temprature=1.0, # 温度パラメータ．Default: 1.0
+    temperature=1.0, # 温度パラメータ．Default: 1.0
     eps=1e-6, # 0に近い値を指定するとエラーになるので注意．Default: 1e-6
     is_argmax=False, # argmaxを使うかどうか．Default: False
 )
@@ -211,7 +211,7 @@ from ml_networks import SpatialSoftmaxConfig, SpatialSoftmax
 
 data = torch.randn(32, 3, 64, 64)
 cfg = SpatialSoftmaxConfig(
-    temprature=1.0, # 温度パラメータ．Default: 1.0
+    temperature=1.0, # 温度パラメータ．Default: 1.0
     eps=1e-6, # 0に近い値を指定するとエラーになるので注意．Default: 1e-6
     is_argmax=False, # argmaxを使うかどうか．Default: False
 )
@@ -236,7 +236,7 @@ Upsamplingを行うアーキテクチャを変えたい場合は引数に渡すC
 # 参考: https://note.com/kiyo_ai_note/n/ne4d78a36de04
 decoder_cfg = ConvNetConfig(
     channels=[64, 32, 16], # 各層のchannel数．最初から順に入力（特徴量）に近い層のchannel数を指定．
-                           # ここの数はconv_cfgsの数と一致している必要がある． 
+                           # ここの数はconv_cfgsの数と一致している必要がある．
     conv_cfgs=[
         ConvConfig(
             output_padding=0, # 出力パディング. ConvTranspose2dのみに利用される．Default: 0
@@ -380,7 +380,7 @@ len(dataloader)
 >>> 100
 for batch in dataloader:
     obs = batch["obs"]
-    obs.shape 
+    obs.shape
     >>> torch.Size([32, 3, 64, 64])
     z = encoder(obs)
     dist_z = dist(z)
@@ -389,7 +389,7 @@ for batch in dataloader:
 # 分布データをstack
 from ml_networks import stack_dist
 stacked_dist = stack_dist(
-    dist_list, 
+    dist_list,
     dim=0 # どの次元でstackするか．Default: 0
 )
 print(stacked_dist.shape)
@@ -456,8 +456,8 @@ from ml_networks import focal_loss, binary_focal_loss
 logits = torch.randn(32, 10)
 labels = torch.randint(0, 10, (32,))
 loss = focal_loss(
-    logits, 
-    labels, 
+    logits,
+    labels,
     gamma=2.0, # Focal Lossの重みの調整. 論文を見て．Default: 2.0
     sum_dim=-1 # どの次元でsumするか．他の次元は平均を取る．Default: -1
 )
@@ -466,8 +466,8 @@ loss = focal_loss(
 logits = torch.randn(32)
 labels = torch.randint(0, 2, (32,))
 loss = binary_focal_loss(
-    logits, 
-    labels, 
+    logits,
+    labels,
     gamma=2.0, # Focal Lossの重みの調整. 論文を見て．Default: 2.0
     sum_dim=-1 # どの次元でsumするか．他の次元は平均を取る．Default: -1
 )
@@ -484,11 +484,11 @@ from ml_networks import FocalFrequencyLoss, charbonnier
 # charbonnier loss
 # 損失の勾配が安定するらしい
 loss = charbonnier(
-    predicted_obs, 
-    obs, 
+    predicted_obs,
+    obs,
     epsilon = 1e-3, # charbonnier lossのパラメータ．Default: 1e-3
     alpha=1, # charbonnier lossのパラメータ．Default: 0.45
-    sum_dim=[-1, -2, -3] # どの次元でsumするか．他の次元は平均を取る．Default: [-1, -2, -3] 
+    sum_dim=[-1, -2, -3] # どの次元でsumするか．他の次元は平均を取る．Default: [-1, -2, -3]
 )
 
 # focal frequency loss
@@ -512,7 +512,7 @@ loss = loss_fn(predicted_obs, obs)
 #### activations
 stringで活性化関数を指定．
 pytorchに実装されている活性化関数に加えて，以下の活性化関数が使えます．
-- "REReLU" 
+- "REReLU"
     - "Reparametrized ReLU": 逆伝播がGELU等になるReLU. See [here](https://openreview.net/forum?id=lNCnZwcH5Z)
 - "SiGLU"
     - "SiLU + GLU": SiLU(Swish)とGLUを組み合わせた活性化関数. See [here](https://arxiv.org/abs/2102.11972v2)
@@ -529,7 +529,7 @@ act = Activation("ReLU")
 
 #### optimizers
 stringで最適化手法を指定．
-pytorchに実装されている最適化手法に加えて，  
+pytorchに実装されている最適化手法に加えて，
 [pytorch_optimizer](https://pypi.org/project/pytorch_optimizer/)に実装されている最適化手法が使えます．
 最新のものが多いので便利．
 ```python
@@ -560,7 +560,7 @@ dataset = Dataset(any_data)
 # DataLoaderの再現性を担保する．
 # 通常のdataloaderの呼び出しでは，データの読み出しに関する再現性は担保されない．
 loader = determine_loader(
-    dataset, 
+    dataset,
     seed=42, # 乱数のseed
     batch_size=32, # バッチサイズ
     shuffle=True, # 毎エポックデータセットの中身を入れ替えるか. Validationの時はFalseにする．

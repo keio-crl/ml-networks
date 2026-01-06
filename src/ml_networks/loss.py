@@ -1,20 +1,23 @@
+"""損失関数を扱うモジュール."""
 
 from __future__ import annotations
-import numpy as np
+
 import torch
 import torch.distributions as D
 import torch.nn.functional as F
+
 from ml_networks.distributions import StochState
-from typing import Union
 
 # version adaptation for PyTorch > 1.7.1
-IS_HIGH_VERSION = tuple(map(int, torch.__version__.split('+')[0].split('.'))) > (1, 7, 1)
+IS_HIGH_VERSION = tuple(map(int, torch.__version__.split("+")[0].split("."))) > (1, 7, 1)
 if IS_HIGH_VERSION:
     import torch.fft
 
+
 class FocalFrequencyLoss:
-    """The torch.nn.Module class that implements focal frequency loss - a
-    frequency domain loss function for optimizing generative models.
+    """The torch.nn.Module class that implements focal frequency loss.
+
+    A frequency domain loss function for optimizing generative models.
 
     Reference
     ---------
@@ -37,7 +40,15 @@ class FocalFrequencyLoss:
         whether to calculate the spectrum weight matrix using batch-based statistics. Default: False
     """
 
-    def __init__(self, loss_weight=1.0, alpha=1.0, patch_factor=1, ave_spectrum=False, log_matrix=False, batch_matrix=False):
+    def __init__(
+        self,
+        loss_weight: float = 1.0,
+        alpha: float = 1.0,
+        patch_factor: int = 1,
+        ave_spectrum: bool = False,
+        log_matrix: bool = False,
+        batch_matrix: bool = False,
+    ) -> None:
         self.loss_weight = loss_weight
         self.alpha = alpha
         self.patch_factor = patch_factor
@@ -45,31 +56,38 @@ class FocalFrequencyLoss:
         self.log_matrix = log_matrix
         self.batch_matrix = batch_matrix
 
-    def tensor2freq(self, x):
+    def tensor2freq(self, x: torch.Tensor) -> torch.Tensor:
         # crop image patches
         patch_factor = self.patch_factor
         _, _, h, w = x.shape
-        assert h % patch_factor == 0 and w % patch_factor == 0, (
-            'Patch factor should be divisible by image height and width')
-        patch_list = []
+        assert h % patch_factor == 0, "Patch factor should be divisible by image height"
+        assert w % patch_factor == 0, "Patch factor should be divisible by image width"
         patch_h = h // patch_factor
         patch_w = w // patch_factor
-        for i in range(patch_factor):
-            for j in range(patch_factor):
-                patch_list.append(x[:, :, i * patch_h:(i + 1) * patch_h, j * patch_w:(j + 1) * patch_w])
+        patch_list: list[torch.Tensor] = [
+            x[:, :, i * patch_h : (i + 1) * patch_h, j * patch_w : (j + 1) * patch_w]
+            for i in range(patch_factor)
+            for j in range(patch_factor)
+        ]
 
         # stack to patch tensor
         y = torch.stack(patch_list, 1)
 
         # perform 2D DFT (real-to-complex, orthonormalization)
         if IS_HIGH_VERSION:
-            freq = torch.fft.fft2(y, norm='ortho')
+            freq = torch.fft.fft2(y, norm="ortho")
             freq = torch.stack([freq.real, freq.imag], -1)
         else:
             freq = torch.rfft(y, 2, onesided=False, normalized=True)
         return freq
 
-    def loss_formulation(self, recon_freq, real_freq, matrix=None):
+    def loss_formulation(
+        self,
+        recon_freq: torch.Tensor,
+        real_freq: torch.Tensor,
+        matrix: torch.Tensor | None = None,
+        mean_batch: bool = True,
+    ) -> torch.Tensor:
         # spectrum weight matrix
         if matrix is not None:
             # if the matrix is predefined
@@ -93,9 +111,10 @@ class FocalFrequencyLoss:
             matrix_tmp = torch.clamp(matrix_tmp, min=0.0, max=1.0)
             weight_matrix = matrix_tmp.clone().detach()
 
-        assert weight_matrix.min().item() >= 0 and weight_matrix.max().item() <= 1, (
-            'The values of spectrum weight matrix should be in the range [0, 1], '
-            'but got Min: %.10f Max: %.10f' % (weight_matrix.min().item(), weight_matrix.max().item()))
+        min_val = weight_matrix.min().item()
+        max_val = weight_matrix.max().item()
+        assert min_val >= 0, f"The values of spectrum weight matrix should be >= 0, but got Min: {min_val:.10f}"
+        assert max_val <= 1, f"The values of spectrum weight matrix should be <= 1, but got Max: {max_val:.10f}"
 
         # frequency distance using (squared) Euclidean distance
         tmp = (recon_freq - real_freq) ** 2
@@ -103,11 +122,18 @@ class FocalFrequencyLoss:
 
         # dynamic spectrum weighting (Hadamard product)
         loss = weight_matrix * freq_distance
-
         loss = loss.sum(dim=[-1, -2, -3])
+        if mean_batch:
+            loss = loss.mean()
         return loss
 
-    def __call__(self, pred, target, matrix=None, mean_batch=True, **kwargs):
+    def __call__(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        matrix: torch.Tensor | None = None,
+        mean_batch: bool = True,
+    ) -> torch.Tensor:
         """Forward function to calculate focal frequency loss.
 
         Parameters
@@ -116,8 +142,15 @@ class FocalFrequencyLoss:
             of shape (N, C, H, W). Predicted tensor.
         target: torch.Tensor
             of shape (N, C, H, W). Target tensor.
-        matrix: torch.Tensor
+        matrix: torch.Tensor | None
             Default: None (If set to None: calculated online, dynamic).
+        mean_batch: bool
+            Whether to average over batch dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            The focal frequency loss.
         """
         if target.shape != pred.shape:
             target = target.expand_as(pred)
@@ -138,17 +171,18 @@ class FocalFrequencyLoss:
             target_freq = torch.mean(target_freq, 0, keepdim=True)
 
         # calculate focal frequency loss
-        loss =  self.loss_formulation(pred_freq, target_freq, matrix, mean_batch) * self.loss_weight
+        loss = self.loss_formulation(pred_freq, target_freq, matrix, mean_batch) * self.loss_weight
         if flattened and not mean_batch:
             loss = loss.reshape(batch_shape)
         return loss
+
 
 def charbonnier(
     prediction: torch.Tensor,
     target: torch.Tensor,
     epsilon: float = 1e-3,
     alpha: float = 1,
-    sum_dim: Union[int, list[int], tuple[int]] = [-1, -2, -3],
+    sum_dim: int | list[int] | tuple[int, ...] | None = None,
 ) -> torch.Tensor:
     """
     Charbonnier loss function.
@@ -168,17 +202,24 @@ def charbonnier(
         A small value to avoid division by zero. Default is 1e-3.
     alpha : float
         The alpha parameter. Default is 1.
-    sum_dim : Union[int, list[int], tuple[int]]
-        The dimension to sum the loss. Default is [-1, -2, -3].
+    sum_dim : int | list[int] | tuple[int, ...] | None
+        The dimension to sum the loss. Default is None (sums over [-1, -2, -3]).
+
+    Returns
+    -------
+    torch.Tensor
+        The Charbonnier loss.
 
     """
+    if sum_dim is None:
+        sum_dim = [-1, -2, -3]
     x = prediction - target
     loss = (x**2 + epsilon**2) ** (alpha / 2)
     return torch.sum(loss, dim=sum_dim)
 
-def kl_divergence(posterior: StochState, prior: StochState, **kwargs):
-    """
-    KL divergence between two distributions for StochState in ml-networks.
+
+def kl_divergence(posterior: StochState, prior: StochState) -> torch.Tensor:
+    """KL divergence between two distributions for StochState in ml-networks.
 
     Parameters
     ----------
@@ -193,14 +234,13 @@ def kl_divergence(posterior: StochState, prior: StochState, **kwargs):
         The KL divergence between the two distributions.
 
     """
-    kld = D.kl_divergence(posterior.get_distribution(), prior.get_distribution())
+    return D.kl_divergence(posterior.get_distribution(), prior.get_distribution())
 
-    return kld
 
-def kl_balancing(posterior: StochState, prior: StochState, weight: float=0.8):
+def kl_balancing(posterior: StochState, prior: StochState, weight: float = 0.8) -> torch.Tensor:
     """
     KL balancing loss function for StochState in ml-networks.
-    
+
     Reference
     ---------
     Mastering Atari with Discrete World Models. In NeurIPS 2020.
@@ -223,17 +263,17 @@ def kl_balancing(posterior: StochState, prior: StochState, weight: float=0.8):
     """
     assert 0 <= weight <= 1, "weight should be in the range [0, 1]"
     kld_prior = weight * D.kl_divergence(
-        posterior.detach().get_distribution(), prior.get_distribution()
+        posterior.detach().get_distribution(),
+        prior.get_distribution(),
     )
 
     kld_posterior = (1 - weight) * D.kl_divergence(
-        posterior.get_distribution(), prior.detach().get_distribution()
+        posterior.get_distribution(),
+        prior.detach().get_distribution(),
     )
 
-    kld = kld_prior + kld_posterior
+    return kld_prior + kld_posterior
 
-
-    return kld
 
 def focal_loss(
     prediction: torch.Tensor,
@@ -260,6 +300,11 @@ def focal_loss(
     sum_dim : int
         The dimension to sum the loss. Default is -1.
 
+    Returns
+    -------
+    torch.Tensor
+        The focal loss.
+
     """
     prediction = prediction.unsqueeze(1).transpose(sum_dim, 1).squeeze(-1)
     if gamma:
@@ -269,6 +314,7 @@ def focal_loss(
     else:
         loss = F.cross_entropy(prediction, target, reduction="none")
     return loss.mean(0).sum()
+
 
 def binary_focal_loss(
     prediction: torch.Tensor,
@@ -294,19 +340,20 @@ def binary_focal_loss(
         The gamma parameter. Default is 2.0.
     sum_dim : int
         The dimension to sum the loss. Default is -1.
-    
 
+    Returns
+    -------
+    torch.Tensor
+        The binary focal loss.
 
     """
     if gamma:
         log_probs = F.logsigmoid(prediction)
         neg_log_probs = F.logsigmoid(-prediction)
         probs = torch.sigmoid(prediction)
-        focal_weight = torch.where(target == 1, (1 - probs) ** gamma, 
-                               probs ** gamma)
+        focal_weight = torch.where(target == 1, (1 - probs) ** gamma, probs**gamma)
         loss = torch.where(target == 1, -log_probs, -neg_log_probs)
         loss = focal_weight * loss
     else:
         loss = F.binary_cross_entropy_with_logits(prediction, target, reduction="none")
     return loss.sum(sum_dim)
-

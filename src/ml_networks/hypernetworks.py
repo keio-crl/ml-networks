@@ -1,20 +1,24 @@
+"""ハイパーネットワークを扱うモジュール."""
+
+from __future__ import annotations
+
 import warnings
-from collections import OrderedDict
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Literal, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from ml_networks.layers import MLPLayer
-from ml_networks.config import MLPConfig, LinearConfig
 from torch.nn import init
+
+from ml_networks.config import MLPConfig
+from ml_networks.layers import MLPLayer
 
 Shape = Tuple[int, ...]
 
-InputMode = Literal[None, "cos|sin", "z|1-z"]
+InputMode = Optional[Literal["cos|sin", "z|1-z"]]
 
-encoding_multiplier: Dict[InputMode, int] = {
+encoding_multiplier: dict[InputMode, int] = {
     None: 1,
     "cos|sin": 2,
     "z|1-z": 2,
@@ -22,18 +26,21 @@ encoding_multiplier: Dict[InputMode, int] = {
 
 
 def _same_keys(
-    required: Dict[str, Any], provided: Dict[str, Any], name: str = ""
+    required: dict[str, Any],
+    provided: dict[str, Any],
+    name: str = "",
 ) -> None:
-    """
-    Checks if two dictionaries have the same keys.
+    """Check if two dictionaries have the same keys.
 
     Args:
         required: A dictionary with required keys.
         provided: A dictionary with provided keys.
         name: A string name to identify the dictionaries.
 
-    Raises:
-        ValueError: If the dictionaries have missing or unexpected keys.
+    Raises
+    ------
+    ValueError
+        If the dictionaries have missing or unexpected keys.
 
     Examples
     --------
@@ -47,27 +54,29 @@ def _same_keys(
     """
     missing = required.keys() - provided.keys()
     if len(missing) > 0:
-        raise ValueError(f"Missing {name}: {list(missing)}")
+        msg = f"Missing {name}: {list(missing)}"
+        raise ValueError(msg)
 
     unexpected = provided.keys() - required.keys()
     if len(unexpected) > 0:
-        raise ValueError(f"Unexpected {name}: {list(missing)}")
+        msg = f"Unexpected {name}: {list(missing)}"
+        raise ValueError(msg)
 
 
 class HyperNetMixin:
-
-    input_shapes: Dict[str, Shape]
-    output_shapes: Dict[str, Shape]
+    input_shapes: dict[str, Shape]
+    output_shapes: dict[str, Shape]
     encoding: InputMode
 
-    def encode_inputs(self, inputs: Dict[str, Shape]) -> Dict[str, Shape]:
-        """Encodes the inputs using the specified `encoding` mode.
+    def encode_inputs(self, inputs: dict[str, Shape]) -> dict[str, Shape]:
+        """Encode the inputs using the specified `encoding` mode.
 
         Args:
             inputs: A dictionary of input names and shapes.
 
-        Returns:
-            Dict[str, Shape]: A dictionary of encoded input names and shapes.
+        Returns
+        -------
+            dict[str, Shape]: A dictionary of encoded input names and shapes.
 
         Examples
         --------
@@ -81,12 +90,15 @@ class HyperNetMixin:
         >>> encoded["x"].shape
         torch.Size([1, 4])
         """
+        if self.encoding is None:
+            return inputs
         return {k: encode_input(x, mode=self.encoding) for k, x in inputs.items()}
 
     def flat_input_size(self) -> int:
-        """Returns the flat input size after encoding.
+        """Return the flat input size after encoding.
 
-        Returns:
+        Returns
+        -------
             int: The flat input size.
 
         Examples
@@ -99,15 +111,15 @@ class HyperNetMixin:
         >>> net.flat_input_size()
         10
         """
-        flat_input_size = sum(int(np.prod(v))
-                              for v in self.input_shapes.values())
+        flat_input_size = sum(int(np.prod(v)) for v in self.input_shapes.values())
         flat_input_size *= encoding_multiplier[self.encoding]
         return flat_input_size
 
     def flat_output_size(self) -> int:
-        """Returns the flat output size.
+        """Return the flat output size.
 
-        Returns:
+        Returns
+        -------
             int: The flat output size.
 
         Examples
@@ -119,15 +131,14 @@ class HyperNetMixin:
         >>> net.flat_output_size()
         5
         """
-        flat_output_size = sum(int(np.prod(v.shape))
-                               for v in self.output_shapes.values())
-        return flat_output_size
+        return sum(int(np.prod(v)) for v in self.output_shapes.values())
 
-    def output_offsets(self) -> Dict[str, Tuple[int, int]]:
-        """Returns the output offsets.
+    def output_offsets(self) -> dict[str, tuple[int, int]]:
+        """Return the output offsets.
 
-        Returns:
-            Dict[str, Tuple[int, int]]: A dictionary of output names and 
+        Returns
+        -------
+            dict[str, Tuple[int, int]]: A dictionary of output names and
             their corresponding offsets and sizes.
 
         Examples
@@ -145,23 +156,25 @@ class HyperNetMixin:
         offset = 0
         offsets = {}
         for name, shape in self.output_shapes.items():
-            size = int(np.prod(shape.shape))
+            size = int(np.prod(shape))
             offsets[name] = (offset, size)
             offset += size
         return offsets
 
-    def _validate_inputs(self, inputs: Dict[str, torch.Tensor]) -> int:
-        """
-        Validates the inputs.
+    def _validate_inputs(self, inputs: dict[str, torch.Tensor]) -> int:
+        """Validate the inputs.
 
         Args:
-            inputs (Dict[str, Tensor]): A dictionary of input names and their corresponding tensors
+            inputs (dict[str, Tensor]): A dictionary of input names and their corresponding tensors
 
-        Returns:
+        Returns
+        -------
             int: The batch dimension.
 
-        Raises:
-            ValueError: If the input shapes are not as expected or if different batch dimensions are found.
+        Raises
+        ------
+        ValueError
+            If the input shapes are not as expected or if different batch dimensions are found.
 
         Examples
         --------
@@ -179,7 +192,6 @@ class HyperNetMixin:
         _same_keys(self.input_shapes, inputs, name="inputs")
 
         for name, required_shape in self.input_shapes.items():
-
             shape = inputs[name].shape
 
             # If batch dimension is already provided
@@ -192,24 +204,26 @@ class HyperNetMixin:
                 inputs[name] = inputs[name][None]
                 continue
 
-            error_msg = f"Wrong shape for {name}, expected {required_shape} or {('B',*required_shape)}, got {shape}"
+            error_msg = f"Wrong shape for {name}, expected {required_shape} or {('B', *required_shape)}, got {shape}"
             raise ValueError(error_msg)
 
         # All batch dims must match
         batch_dims = [x.shape[0] for x in inputs.values()]
         if len(set(batch_dims)) > 1:
-            raise ValueError(f"Multiple batch dimensions found: {batch_dims}")
+            msg = f"Multiple batch dimensions found: {batch_dims}"
+            raise ValueError(msg)
 
         return batch_dims[0]
 
-    def flatten_inputs(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def flatten_inputs(self, inputs: dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Flattens the input tensors into a single tensor along the last dimension.
 
         Args:
-            inputs (Dict[str, torch.Tensor]): A dictionary of input tensor names and tensor values.
+            inputs (dict[str, torch.Tensor]): A dictionary of input tensor names and tensor values.
 
-        Returns:
+        Returns
+        -------
             Tensor: The flattened input tensor.
 
         Examples
@@ -225,20 +239,21 @@ class HyperNetMixin:
         """
         batch_dim = self._validate_inputs(inputs)
 
-        flat_input = torch.cat(
-            [inputs[hp].view(batch_dim, -1) for hp in sorted(self.input_shapes)], dim=-1
+        return torch.cat(
+            [inputs[hp].view(batch_dim, -1) for hp in sorted(self.input_shapes)],
+            dim=-1,
         )
-        return flat_input
 
-    def unflatten_output(self, flat_output: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def unflatten_output(self, flat_output: torch.Tensor) -> dict[str, torch.Tensor]:
         """
         Unflattens the output tensor into a dictionary of named tensors.
 
         Args:
             flat_output (Tensor): The flattened output tensor.
 
-        Returns:
-            Dict[str, Tensor]: A dictionary of named tensors.
+        Returns
+        -------
+            dict[str, Tensor]: A dictionary of named tensors.
 
         Examples
         --------
@@ -257,13 +272,14 @@ class HyperNetMixin:
         outputs = {}
         batch_dim = flat_output.shape[0]
         for name, shape in self.output_shapes.items():
-            shape = (batch_dim, *shape.shape)
-            outputs[name] = flat_output.narrow(1, *self._output_offsets[name]).view(shape)
+            shape_tuple = (batch_dim, *shape)
+            offsets = self.output_offsets()[name]
+            outputs[name] = flat_output.narrow(1, offsets[0], offsets[1]).view(shape_tuple)
         return outputs
 
 
 class HyperNet(pl.LightningModule, HyperNetMixin):
-    """A hypernetwork that generates weights for a target network. Shape is Dict[str, Tuple[int, ...]]
+    """A hypernetwork that generates weights for a target network. Shape is dict[str, Tuple[int, ...]].
 
     Args:
         input_dim: The dimension of the input.
@@ -298,10 +314,10 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
     def __init__(
         self,
         input_dim: int,
-        output_params: Dict[str, Shape],
-        fc_cfg: Optional[MLPConfig] = None,
-        encoding=None,
-    ):
+        output_params: dict[str, Shape],
+        fc_cfg: MLPConfig | None = None,
+        encoding: InputMode = None,
+    ) -> None:
         super().__init__()
 
         self.input_dim = input_dim
@@ -311,26 +327,26 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
         # Cache this property to avoid recomputation
         self._output_offsets = self.output_offsets()
 
-
         if fc_cfg is not None:
             self.backbone = MLPLayer(
                 self.input_dim,
                 self.flat_output_size(),
-                fc_cfg
+                fc_cfg,
             )
         else:
             self.backbone = nn.Linear(
                 self.input_dim,
-                self.flat_output_size()
+                self.flat_output_size(),
             )
 
-    def forward(self, inputs: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """Performs a forward pass of the neural network.
+    def forward(self, inputs: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Perform a forward pass of the neural network.
 
         Args:
             inputs: The input tensors.
 
-        Returns:
+        Returns
+        -------
             A dictionary of output tensors.
 
         Examples
@@ -357,26 +373,26 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
         >>> outputs["bias"].shape
         torch.Size([2, 5])
         """
-
-        inputs = encode_input(inputs, self.encoding)
+        if self.encoding is not None:
+            inputs = encode_input(inputs, self.encoding)
 
         flat_output = self.backbone(inputs)
-        outputs = self.unflatten_output(flat_output)
-        return outputs
+        return self.unflatten_output(flat_output)
 
 
 def encode_input(input: torch.Tensor, mode: str = "cos|sin") -> torch.Tensor:
-    """
-    Encodes the input tensor based on the specified mode.
+    """Encode the input tensor based on the specified mode.
 
     Args:
         input (Tensor): The input tensor.
         mode (InputMode): The encoding mode.
 
-    Returns:
+    Returns
+    -------
         Tensor: The encoded tensor.
 
-    Raises:
+    Raises
+    ------
         UserWarning: If the input tensor is outside the specified range in cos|sin mode.
 
     Examples
@@ -407,6 +423,7 @@ def encode_input(input: torch.Tensor, mode: str = "cos|sin") -> torch.Tensor:
 
     if mode == "z|1-z":
         return torch.cat([z, 1 - z], dim=-1)
+    return None
 
 
 def _check_tensor_range(tensor: torch.Tensor, low: float, high: float) -> None:
@@ -418,7 +435,8 @@ def _check_tensor_range(tensor: torch.Tensor, low: float, high: float) -> None:
         low (float): The lower bound of the range.
         high (float): The upper bound of the range.
 
-    Raises:
+    Raises
+    ------
         UserWarning: If the input tensor is outside the specified range.
 
     Examples
@@ -428,25 +446,25 @@ def _check_tensor_range(tensor: torch.Tensor, low: float, high: float) -> None:
     >>> x = torch.tensor([[0.5, 0.3], [0.7, 1.1]])
     """
     if (tensor < low).any() or (tensor > high).any():
-        warnings.warn(
-            f"Input tensor has dimensions outside of [{low},{high}].")
+        warnings.warn(f"Input tensor has dimensions outside of [{low},{high}].", stacklevel=2)
 
 
 def initialize_weight(
     weight: torch.Tensor,
-    distribution: Optional[str],
-    nonlinearity: Optional[str] = "LeakyReLU",
+    distribution: str | None,
+    nonlinearity: str | None = "LeakyReLU",
 ) -> None:
-    """
-    Initialize weight tensor using the specified distribution and nonlinearity function.
+    """Initialize weight tensor using the specified distribution and nonlinearity function.
 
     Args:
         weight (torch.Tensor): Tensor to be initialized.
         distribution (str, optional): Distribution to use for initialization.
         nonlinearity (str, optional): Nonlinearity function to use. Defaults to "LeakyReLU".
 
-    Raises:
-        ValueError: When the specified distribution is not supported.
+    Raises
+    ------
+    ValueError
+        When the specified distribution is not supported.
 
     Examples
     --------
@@ -484,8 +502,7 @@ def initialize_weight(
     elif distribution == "kaiming_normal_fanout":
         init.kaiming_normal_(weight, nonlinearity=nonlinearity, mode="fan_out")
     elif distribution == "kaiming_uniform_fanout":
-        init.kaiming_uniform_(
-            weight, nonlinearity=nonlinearity, mode="fan_out")
+        init.kaiming_uniform_(weight, nonlinearity=nonlinearity, mode="fan_out")
     elif distribution == "glorot_normal":
         init.xavier_normal_(weight, gain=gain)
     elif distribution == "glorot_uniform":
@@ -493,19 +510,21 @@ def initialize_weight(
     elif distribution == "orthogonal":
         init.orthogonal_(weight, gain)
     else:
-        raise ValueError(f"Unsupported weight distribution '{distribution}'")
+        msg = f"Unsupported weight distribution '{distribution}'"
+        raise ValueError(msg)
 
 
-def initialize_bias(bias: torch.Tensor, distribution: Optional[float] = 0.0) -> None:
-    """
-    Initializes the bias tensor of a layer using the given distribution.
+def initialize_bias(bias: torch.Tensor, distribution: float | None = 0.0) -> None:
+    """Initialize the bias tensor of a layer using the given distribution.
 
     Args:
         bias (nn.Parameter): the bias tensor to be initialized
         distribution (float): the distribution to use for initialization, default is 0 (constant)
 
-    Raises:
-        ValueError: When the specified distribution is not supported.
+    Raises
+    ------
+    ValueError
+        When the specified distribution is not supported.
 
     Examples
     --------
@@ -523,17 +542,17 @@ def initialize_bias(bias: torch.Tensor, distribution: Optional[float] = 0.0) -> 
         init.constant_(bias, distribution)
         return
 
-    raise ValueError(f"Unsupported bias distribution '{distribution}'")
+    msg = f"Unsupported bias distribution '{distribution}'"
+    raise ValueError(msg)
 
 
 def initialize_layer(
     layer: nn.Module,
-    distribution: Optional[str] = "kaiming_normal",
-    init_bias: Optional[float] = 0.0,
-    nonlinearity: Optional[str] = "LeakyReLU",
+    distribution: str | None = "kaiming_normal",
+    init_bias: float | None = 0.0,
+    nonlinearity: str | None = "LeakyReLU",
 ) -> None:
-    """
-    Initializes the weight and bias tensors of a linear or convolutional layer using the given distribution.
+    """Initialize the weight and bias tensors of a linear or convolutional layer using the given distribution.
 
     Args:
     - layer (nn.Module): the linear or convolutional layer to be initialized
@@ -541,22 +560,20 @@ def initialize_layer(
     - init_bias (float): the initial value of the bias tensor, default is 0
     - nonlinearity (str): the nonlinearity function to use for initialization, default is "LeakyReLU"
 
-    Returns:
-    - None
-
     Examples
     --------
     >>> layer = nn.Linear(2, 3)
     >>> initialize_layer(layer, "kaiming_normal", 0.1)
     >>> layer = nn.Conv2d(2, 3, 3)
     >>> initialize_layer(layer, "kaiming_normal", 0.1)
-    >>> layer = nn.BatchNorm2d(3)  
+    >>> layer = nn.BatchNorm2d(3)
     >>> initialize_layer(layer, "kaiming_normal", 0.1)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     AssertionError: Can only be applied to linear and conv layers, given BatchNorm2d
     """
     assert isinstance(
-        layer, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)
+        layer,
+        (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d),
     ), f"Can only be applied to linear and conv layers, given {layer.__class__.__name__}"
 
     initialize_weight(layer.weight, distribution, nonlinearity)
@@ -566,4 +583,5 @@ def initialize_layer(
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

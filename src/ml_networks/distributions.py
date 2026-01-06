@@ -1,27 +1,42 @@
+"""確率分布と確率的状態を扱うモジュール."""
 
 from __future__ import annotations
-from typing import Literal, Union, Tuple
+
 import os
+from dataclasses import dataclass
+from typing import Any, Literal, Union
 
 import torch
 import torch.distributions as D
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+
 from ml_networks.utils import save_blosc2, softmax
-from dataclasses import dataclass
+
 
 def get_dist(state: StochState) -> D.Independent:
+    """確率的状態から分布を取得する.
+
+    Parameters
+    ----------
+    state : StochState
+        正規分布・カテゴリカル分布・ベルヌーイ分布のいずれかの確率的状態。
+
+    Returns
+    -------
+    D.Independent
+        与えられた状態に対応する`torch.distributions.Independent`オブジェクト。
+    """
     if isinstance(state, NormalStoch):
         dist = D.Normal(state.mean, state.std)
         return D.Independent(dist, 1)
-    elif isinstance(state, CategoricalStoch):
+    if isinstance(state, CategoricalStoch):
         dist = D.OneHotCategoricalStraightThrough(probs=state.probs)
         return D.Independent(dist, 1)
-    elif isinstance(state, BernoulliStoch):
+    if isinstance(state, BernoulliStoch):
         dist = BernoulliStraightThrough(probs=state.probs)
         return D.Independent(dist, 2)
-    else:
-        raise NotImplementedError
+    raise NotImplementedError
 
 
 @dataclass
@@ -60,47 +75,90 @@ class NormalStoch:
         sample from the normal distribution with reparametrization trick.
 
     """
+
     mean: torch.Tensor
     std: torch.Tensor
     stoch: torch.Tensor
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """初期化後の処理.
+
+        Raises
+        ------
+        ValueError
+            `mean` と `std` のshapeが異なる場合、または`std`に負の値が含まれる場合。
+        """
         if self.mean.shape != self.std.shape:
-            raise ValueError(f"mean.shape {self.mean.shape} and std.shape {self.std.shape} must be the same.")
+            msg = f"mean.shape {self.mean.shape} and std.shape {self.std.shape} must be the same."
+            raise ValueError(msg)
         if (self.std < 0).any():
-            raise ValueError(f"std must be non-negative.")
+            msg = "std must be non-negative."
+            raise ValueError(msg)
 
+    def __getitem__(self, idx: int | slice | tuple) -> NormalStoch:
+        """インデックスアクセス.
 
-    def __getitem__(self, idx):
+        Parameters
+        ----------
+        idx : int or slice or tuple
+            インデックス指定。
+
+        Returns
+        -------
+        NormalStoch
+            指定されたインデックスに対応する`NormalStoch`。
+        """
         return NormalStoch(self.mean[idx], self.std[idx], self.stoch[idx])
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """長さを返す.
+
+        Returns
+        -------
+        int
+            バッチ次元の長さ。
+        """
         return self.stoch.shape[0]
 
     @property
-    def shape(self):
-        """ 
-        mean, std, stoch の shape をタプルで返す
-
-        """
+    def shape(self) -> NormalShape:
+        """mean, std, stoch の shape をタプルで返す."""
         return NormalShape(self.mean.shape, self.std.shape, self.stoch.shape)
 
-    def __getattr__(self, name):
-        """
-        torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する
-        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten())
+    def __getattr__(self, name: str) -> Any:
+        """torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する.
+
+        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten()).
+
+        Parameters
+        ----------
+        name : str
+            メソッド名。
+
+        Returns
+        -------
+        callable
+            torch.Tensorのメソッドを各メンバに適用する関数。
+
+        Raises
+        ------
+        AttributeError
+            指定された名前がtorch.Tensorのメソッドでない場合。
         """
         if hasattr(torch.Tensor, name):  # torch.Tensor のメソッドか確認
-            def method(*args, **kwargs):
+
+            def method(*args: Any, **kwargs: Any) -> NormalStoch:
                 return NormalStoch(
                     getattr(self.mean, name)(*args, **kwargs),
                     getattr(self.std, name)(*args, **kwargs),
-                    getattr(self.stoch, name)(*args, **kwargs)
+                    getattr(self.stoch, name)(*args, **kwargs),
                 )
-            return method
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    def unsqueeze(self, dim: int):
+            return method
+        msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        raise AttributeError(msg)
+
+    def unsqueeze(self, dim: int) -> NormalStoch:
         """
         Unsqueeze the parameters of the normal distribution.
 
@@ -118,9 +176,10 @@ class NormalStoch:
         return NormalStoch(
             self.mean.unsqueeze(dim),
             self.std.unsqueeze(dim),
-            self.stoch.unsqueeze(dim)
+            self.stoch.unsqueeze(dim),
         )
-    def squeeze(self, dim: int):
+
+    def squeeze(self, dim: int) -> NormalStoch:
         """
         Squeeze the parameters of the normal distribution.
 
@@ -138,10 +197,10 @@ class NormalStoch:
         return NormalStoch(
             self.mean.squeeze(dim),
             self.std.squeeze(dim),
-            self.stoch.squeeze(dim)
+            self.stoch.squeeze(dim),
         )
 
-    def save(self, path: str):
+    def save(self, path: str) -> None:
         """
         Save the parameters of the normal distribution to the specified path.
 
@@ -152,13 +211,14 @@ class NormalStoch:
 
         """
         os.makedirs(path, exist_ok=True)
-        
+
         save_blosc2(f"{path}/mean.blosc2", self.mean.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/std.blosc2", self.std.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self, independent: int = 1):
+    def get_distribution(self, independent: int = 1) -> D.Independent:
         return D.Independent(D.Normal(self.mean, self.std), independent)
+
 
 @dataclass
 class CategoricalShape:
@@ -175,9 +235,11 @@ class CategoricalShape:
         Shape of the sample from the categorical distribution with Straight-Through Estimator.
 
     """
+
     logits: torch.Size
     probs: torch.Size
     stoch: torch.Size
+
 
 @dataclass
 class CategoricalStoch:
@@ -192,27 +254,58 @@ class CategoricalStoch:
         Probabilities of the categorical distribution.
     stoch : torch.Tensor
         sample from the categorical distribution with Straight-Through Estimator.
-    
+
     """
+
     logits: torch.Tensor
     probs: torch.Tensor
     stoch: torch.Tensor
 
-    def __post_init__(self):
-        if self.logits.shape != self.probs.shape:
-            raise ValueError(f"logits.shape {self.logits.shape} and probs.shape {self.probs.shape} must be the same.")
-        if (self.probs < 0).any() or (self.probs > 1).any():
-            raise ValueError(f"probs must be in the range [0, 1].")
-        if (self.probs.sum(dim=-1) - 1).abs().max() > 1e-6:
-            raise ValueError(f"probs must sum to 1.")
+    def __post_init__(self) -> None:
+        """初期化後の処理.
 
-    def __getitem__(self, idx):
+        Raises
+        ------
+        ValueError
+            `logits` と `probs` のshapeが異なる場合、
+            あるいは`probs`が[0, 1]の範囲外、または和が1から大きくずれている場合。
+        """
+        if self.logits.shape != self.probs.shape:
+            msg = f"logits.shape {self.logits.shape} and probs.shape {self.probs.shape} must be the same."
+            raise ValueError(msg)
+        if (self.probs < 0).any() or (self.probs > 1).any():
+            msg = "probs must be in the range [0, 1]."
+            raise ValueError(msg)
+        if (self.probs.sum(dim=-1) - 1).abs().max() > 1e-6:
+            msg = "probs must sum to 1."
+            raise ValueError(msg)
+
+    def __getitem__(self, idx: int | slice | tuple) -> CategoricalStoch:
+        """インデックスアクセス.
+
+        Parameters
+        ----------
+        idx : int or slice or tuple
+            インデックス指定。
+
+        Returns
+        -------
+        CategoricalStoch
+            指定されたインデックスに対応する`CategoricalStoch`。
+        """
         return CategoricalStoch(self.logits[idx], self.probs[idx], self.stoch[idx])
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """長さを返す.
+
+        Returns
+        -------
+        int
+            バッチ次元の長さ。
+        """
         return self.stoch.shape[0]
 
-    def squeeze(self, dim: int):
+    def squeeze(self, dim: int) -> CategoricalStoch:
         """
         Squeeze the parameters of the categorical distribution.
 
@@ -230,10 +323,10 @@ class CategoricalStoch:
         return CategoricalStoch(
             self.logits.squeeze(dim),
             self.probs.squeeze(dim),
-            self.stoch.squeeze(dim)
+            self.stoch.squeeze(dim),
         )
 
-    def unsqueeze(self, dim: int):
+    def unsqueeze(self, dim: int) -> CategoricalStoch:
         """
         Unsqueeze the parameters of the categorical distribution.
 
@@ -251,30 +344,48 @@ class CategoricalStoch:
         return CategoricalStoch(
             self.logits.unsqueeze(dim),
             self.probs.unsqueeze(dim),
-            self.stoch.unsqueeze(dim)
+            self.stoch.unsqueeze(dim),
         )
 
     @property
-    def shape(self):
-        """ mean, std, stoch の shape をタプルで返す """
+    def shape(self) -> CategoricalShape:
+        """mean, std, stoch の shape をタプルで返す."""
         return CategoricalShape(self.logits.shape, self.probs.shape, self.stoch.shape)
 
-    def __getattr__(self, name):
-        """
-        torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する
-        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten())
+    def __getattr__(self, name: str) -> Any:
+        """torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する.
+
+        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten()).
+
+        Parameters
+        ----------
+        name : str
+            メソッド名。
+
+        Returns
+        -------
+        callable
+            torch.Tensorのメソッドを各メンバに適用する関数。
+
+        Raises
+        ------
+        AttributeError
+            指定された名前がtorch.Tensorのメソッドでない場合。
         """
         if hasattr(torch.Tensor, name):  # torch.Tensor のメソッドか確認
-            def method(*args, **kwargs):
-                return CategoricalStoch( 
+
+            def method(*args: Any, **kwargs: Any) -> CategoricalStoch:
+                return CategoricalStoch(
                     getattr(self.logits, name)(*args, **kwargs),
                     getattr(self.probs, name)(*args, **kwargs),
-                    getattr(self.stoch, name)(*args, **kwargs)
+                    getattr(self.stoch, name)(*args, **kwargs),
                 )
-            return method
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    def save(self, path: str):
+            return method
+        msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        raise AttributeError(msg)
+
+    def save(self, path: str) -> None:
         """
         Save the parameters of the categorical distribution to the specified path.
 
@@ -284,13 +395,14 @@ class CategoricalStoch:
             Path to save the parameters.
         """
         os.makedirs(path, exist_ok=True)
-        
+
         save_blosc2(f"{path}/logits.blosc2", self.logits.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self, independent: int = 1):
+    def get_distribution(self, independent: int = 1) -> D.Independent:
         return D.Independent(D.OneHotCategoricalStraightThrough(self.probs), independent)
+
 
 @dataclass
 class BernoulliShape:
@@ -307,6 +419,7 @@ class BernoulliShape:
         Shape of the sample from the Bernoulli distribution with Straight-Through Estimator.
 
     """
+
     logits: torch.Size
     probs: torch.Size
     stoch: torch.Size
@@ -325,47 +438,92 @@ class BernoulliStoch:
         Probabilities of the Bernoulli distribution.
     stoch : torch.Tensor
         sample from the Bernoulli distribution with Straight-Through Estimator.
-    
-    """
 
+    """
 
     logits: torch.Tensor
     probs: torch.Tensor
     stoch: torch.Tensor
 
-    def __post_init__(self):
-        if self.logits.shape != self.probs.shape:
-            raise ValueError(f"logits.shape {self.logits.shape} and probs.shape {self.probs.shape} must be the same.")
-        if (self.probs < 0).any() or (self.probs > 1).any():
-            raise ValueError(f"probs must be in the range [0, 1].")
+    def __post_init__(self) -> None:
+        """初期化後の処理.
 
-    def __getitem__(self, idx):
+        Raises
+        ------
+        ValueError
+            `logits` と `probs` のshapeが異なる場合、あるいは`probs`が[0, 1]の範囲外の場合。
+        """
+        if self.logits.shape != self.probs.shape:
+            msg = f"logits.shape {self.logits.shape} and probs.shape {self.probs.shape} must be the same."
+            raise ValueError(msg)
+        if (self.probs < 0).any() or (self.probs > 1).any():
+            msg = "probs must be in the range [0, 1]."
+            raise ValueError(msg)
+
+    def __getitem__(self, idx: int | slice | tuple) -> CategoricalStoch:
+        """インデックスアクセス.
+
+        Parameters
+        ----------
+        idx : int or slice or tuple
+            インデックス指定。
+
+        Returns
+        -------
+        CategoricalStoch
+            指定されたインデックスに対応する`CategoricalStoch`。
+        """
         return CategoricalStoch(self.logits[idx], self.probs[idx], self.stoch[idx])
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """長さを返す.
+
+        Returns
+        -------
+        int
+            バッチ次元の長さ。
+        """
         return self.stoch.shape[0]
 
     @property
-    def shape(self):
-        """ mean, std, stoch の shape をタプルで返す """
+    def shape(self) -> BernoulliShape:
+        """mean, std, stoch の shape をタプルで返す."""
         return BernoulliShape(self.logits.shape, self.probs.shape, self.stoch.shape)
 
-    def __getattr__(self, name):
-        """
-        torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する
-        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten())
+    def __getattr__(self, name: str) -> Any:
+        """torch.Tensor に含まれるメソッドを呼び出したら、各メンバに適用する.
+
+        例: normal.flatten() → NormalStoch(mean.flatten(), std.flatten(), stoch.flatten()).
+
+        Parameters
+        ----------
+        name : str
+            メソッド名。
+
+        Returns
+        -------
+        callable
+            torch.Tensorのメソッドを各メンバに適用する関数。
+
+        Raises
+        ------
+        AttributeError
+            指定された名前がtorch.Tensorのメソッドでない場合。
         """
         if hasattr(torch.Tensor, name):  # torch.Tensor のメソッドか確認
-            def method(*args, **kwargs):
-                return CategoricalStoch( 
+
+            def method(*args: Any, **kwargs: Any) -> CategoricalStoch:
+                return CategoricalStoch(
                     getattr(self.logits, name)(*args, **kwargs),
                     getattr(self.probs, name)(*args, **kwargs),
-                    getattr(self.stoch, name)(*args, **kwargs)
+                    getattr(self.stoch, name)(*args, **kwargs),
                 )
-            return method
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    def squeeze(self, dim: int):
+            return method
+        msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        raise AttributeError(msg)
+
+    def squeeze(self, dim: int) -> BernoulliStoch:
         """
         Squeeze the parameters of the Bernoulli distribution.
 
@@ -383,9 +541,10 @@ class BernoulliStoch:
         return BernoulliStoch(
             self.logits.squeeze(dim),
             self.probs.squeeze(dim),
-            self.stoch.squeeze(dim)
+            self.stoch.squeeze(dim),
         )
-    def unsqueeze(self, dim: int):
+
+    def unsqueeze(self, dim: int) -> BernoulliStoch:
         """
         Unsqueeze the parameters of the Bernoulli distribution.
 
@@ -403,23 +562,24 @@ class BernoulliStoch:
         return BernoulliStoch(
             self.logits.unsqueeze(dim),
             self.probs.unsqueeze(dim),
-            self.stoch.unsqueeze(dim)
+            self.stoch.unsqueeze(dim),
         )
 
-    def save(self, path: str):
+    def save(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
-        
+
         save_blosc2(f"{path}/logits.blosc2", self.logits.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/probs.blosc2", self.probs.detach().clone().cpu().numpy())
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
-    def get_distribution(self, independent: int = 1):
+    def get_distribution(self, independent: int = 1) -> D.Independent:
         return D.Independent(BernoulliStraightThrough(self.probs), independent)
+
 
 StochState = Union[NormalStoch, CategoricalStoch, BernoulliStoch]
 
 
-def cat_dist(stochs: Tuple[StochState, ...], dim: int = -1):
+def cat_dist(stochs: tuple[StochState, ...], dim: int = -1) -> StochState | None:
     """
     Concatenate the parameters of the distributions.
 
@@ -451,23 +611,22 @@ def cat_dist(stochs: Tuple[StochState, ...], dim: int = -1):
             torch.cat([stoch.std for stoch in stochs], dim=dim),
             torch.cat([stoch.stoch for stoch in stochs], dim=dim),
         )
-    elif isinstance(stochs[0], CategoricalStoch):
+    if isinstance(stochs[0], CategoricalStoch):
         return CategoricalStoch(
             torch.cat([stoch.logits for stoch in stochs], dim=dim),
             torch.cat([stoch.probs for stoch in stochs], dim=dim),
             torch.cat([stoch.stoch for stoch in stochs], dim=dim),
         )
-    elif isinstance(stochs[0], BernoulliStoch):
+    if isinstance(stochs[0], BernoulliStoch):
         return BernoulliStoch(
             torch.cat([stoch.logits for stoch in stochs], dim=dim),
             torch.cat([stoch.probs for stoch in stochs], dim=dim),
             torch.cat([stoch.stoch for stoch in stochs], dim=dim),
         )
-    else:
-        return None
+    return None
 
 
-def stack_dist(stochs: Tuple[StochState, ...], dim: int = 0):
+def stack_dist(stochs: tuple[StochState, ...], dim: int = 0) -> StochState | None:
     """
     Stack the parameters of the distributions.
 
@@ -490,38 +649,36 @@ def stack_dist(stochs: Tuple[StochState, ...], dim: int = 0):
     >>> stack_dist = stack_dist((dist1, dist2))
     >>> stack_dist.shape
     NormalShape(mean=torch.Size([2, 2, 3]), std=torch.Size([2, 2, 3]), stoch=torch.Size([2, 2, 3]))
-        
-    """
 
+    """
     if isinstance(stochs[0], NormalStoch):
         return NormalStoch(
             torch.stack([stoch.mean for stoch in stochs], dim=dim),
             torch.stack([stoch.std for stoch in stochs], dim=dim),
             torch.stack([stoch.stoch for stoch in stochs], dim=dim),
         )
-    elif isinstance(stochs[0], CategoricalStoch):
+    if isinstance(stochs[0], CategoricalStoch):
         return CategoricalStoch(
             torch.stack([stoch.logits for stoch in stochs], dim=dim),
             torch.stack([stoch.probs for stoch in stochs], dim=dim),
             torch.stack([stoch.stoch for stoch in stochs], dim=dim),
         )
-    elif isinstance(stochs[0], BernoulliStoch):
+    if isinstance(stochs[0], BernoulliStoch):
         return BernoulliStoch(
             torch.stack([stoch.logits for stoch in stochs], dim=dim),
             torch.stack([stoch.probs for stoch in stochs], dim=dim),
             torch.stack([stoch.stoch for stoch in stochs], dim=dim),
         )
-    else:
-        return None
+    return None
 
 
 class BernoulliStraightThrough(D.Bernoulli):
     has_rsample = True
 
     def rsample(
-            self, 
-            sample_shape: torch.Size = torch.Size()
-        ) -> torch.Tensor:
+        self,
+        sample_shape: torch.Size = torch.Size(),
+    ) -> torch.Tensor:
         """
         Generate a sample from the Bernoulli distribution with Straight-Through Estimator.
 
@@ -549,20 +706,21 @@ class BernoulliStraightThrough(D.Bernoulli):
         probs = self.probs
         return samples + (probs - probs.detach())
 
+
 class Distribution(nn.Module):
     """
-    A distribution function. 
+    A distribution function.
 
     Parameters
     ----------
     in_dim : int
         Input dimension.
     dist : Literal["normal", "categorical", "bernoulli"]
-        Distribution type. 
+        Distribution type.
     n_groups : int, optional
         Number of groups. Default is 1. This is used for the categorical and Bernoulli distributions.
     spherical : bool, optional
-        Whether to project samples to the unit sphere. Default is False. 
+        Whether to project samples to the unit sphere. Default is False.
         This is used for the categorical and Bernoulli distributions.
         If True and dist=="categorical", the samples are projected from {0, 1} to {-1, 1}.
         If True and dist=="bernoulli", the samples are projected from {0, 1} to the unit sphere.
@@ -596,15 +754,15 @@ class Distribution(nn.Module):
     BernoulliShape(logits=torch.Size([2, 2, 5]), probs=torch.Size([2, 2, 5]), stoch=torch.Size([2, 10]))
 
     """
+
     def __init__(
         self,
         in_dim: int,
         dist: Literal["normal", "categorical", "bernoulli"],
-        n_groups: int = 1, 
+        n_groups: int = 1,
         spherical: bool = False,
     ) -> None:
         super().__init__()
-
 
         self.dist = dist
         self.spherical = spherical
@@ -613,19 +771,21 @@ class Distribution(nn.Module):
         self.n_groups = n_groups
 
         if dist == "normal":
-            self.posterior = self.normal
+            self.posterior = self.normal  # type: ignore[assignment]
         elif dist == "categorical":
-            self.posterior = self.categorical
+            self.posterior = self.categorical  # type: ignore[assignment]
         elif dist == "bernoulli":
-            self.posterior = self.bernoulli
+            self.posterior = self.bernoulli  # type: ignore[assignment]
         else:
             raise NotImplementedError
 
         if spherical:
             self.codebook = BSQCodebook(self.n_class)
 
-    def normal(self, mu_std: torch.Tensor, deterministic: bool=False, inv_tmp: float = 1.0):
-        assert mu_std.shape[-1] == self.in_dim * 2, f"mu_std.shape[-1] {mu_std.shape[-1]} and in_dim {self.in_dim} must be the same."
+    def normal(self, mu_std: torch.Tensor, deterministic: bool = False, inv_tmp: float = 1.0) -> NormalStoch:
+        assert mu_std.shape[-1] == self.in_dim * 2, (
+            f"mu_std.shape[-1] {mu_std.shape[-1]} and in_dim {self.in_dim} must be the same."
+        )
 
         mu, std = torch.chunk(mu_std, 2, dim=-1)
         std = F.softplus(std) + 1e-6
@@ -635,16 +795,14 @@ class Distribution(nn.Module):
 
         sample = posterior_dist.rsample() if not deterministic else mu
 
-        posterior = NormalStoch(mu, std, sample if not deterministic else mu)
+        return NormalStoch(mu, std, sample if not deterministic else mu)
 
-        return posterior
-
-    def categorical(self, logits: torch.Tensor, deterministic: bool=False, inv_tmp: float = 1.0):
+    def categorical(self, logits: torch.Tensor, deterministic: bool = False, inv_tmp: float = 1.0) -> CategoricalStoch:
         batch_shape = logits.shape[:-1]
         logits_chunk = torch.chunk(logits, self.n_groups, dim=-1)
         logits = torch.stack(logits_chunk, dim=-2)
         logits = logits
-        probs = softmax(logits, dim=-1, temperature=1/inv_tmp)
+        probs = softmax(logits, dim=-1, temperature=1 / inv_tmp)
         posterior_dist = D.OneHotCategoricalStraightThrough(probs=probs)
         posterior_dist = D.Independent(posterior_dist, 1)
 
@@ -653,20 +811,22 @@ class Distribution(nn.Module):
         if self.spherical:
             sample = sample * 2 - 1
 
-        posterior = CategoricalStoch(
-            logits, probs, sample.reshape([*batch_shape, -1]) if not deterministic else self.deterministic_onehot(probs).reshape([*batch_shape, -1])
-            )
+        return CategoricalStoch(
+            logits,
+            probs,
+            sample.reshape([*batch_shape, -1])
+            if not deterministic
+            else self.deterministic_onehot(probs).reshape([*batch_shape, -1]),
+        )
 
-        return posterior
-
-    def bernoulli(self, logits: torch.Tensor, deterministic: bool=False, inv_tmp: float = 1.0):
+    def bernoulli(self, logits: torch.Tensor, deterministic: bool = False, inv_tmp: float = 1.0) -> BernoulliStoch:
         batch_shape = logits.shape[:-1]
         chunked_logits = torch.chunk(logits, self.n_groups, dim=-1)
         logits = torch.stack(chunked_logits, dim=-2)
         logits = logits * inv_tmp
         probs = torch.sigmoid(logits)
 
-        posterior_dist = BernoulliStraightThrough(probs=probs)  
+        posterior_dist = BernoulliStraightThrough(probs=probs)
         posterior_dist = D.Independent(posterior_dist, 1)
 
         sample = posterior_dist.rsample()
@@ -675,20 +835,22 @@ class Distribution(nn.Module):
             sample = self.codebook.bits_to_codes(sample)
 
         if deterministic:
-            sample = torch.where(sample > 0.5, torch.ones_like(sample), torch.zeros_like(sample)) + probs - probs.detach()
+            sample = (
+                torch.where(sample > 0.5, torch.ones_like(sample), torch.zeros_like(sample)) + probs - probs.detach()
+            )
 
-        posterior = BernoulliStoch(
-            logits, probs, sample.reshape([*batch_shape, -1]) 
+        return BernoulliStoch(
+            logits,
+            probs,
+            sample.reshape([*batch_shape, -1]),
         )
 
-        return posterior
-
     def forward(
-            self, 
-            x: torch.Tensor, 
-            deterministic: bool=False, 
-            inv_tmp: float = 1.0
-        ) -> StochState:
+        self,
+        x: torch.Tensor,
+        deterministic: bool = False,
+        inv_tmp: float = 1.0,
+    ) -> StochState:
         """
         Compute the posterior distribution.
 
@@ -710,12 +872,12 @@ class Distribution(nn.Module):
         -------
         StochState
             Posterior distribution.
-        
+
 
         """
         return self.posterior(x, deterministic=deterministic, inv_tmp=inv_tmp)
 
-    def deterministic_onehot(self, input:torch.Tensor):
+    def deterministic_onehot(self, input: torch.Tensor) -> torch.Tensor:
         """
         Compute the one-hot vector by argmax.
 
@@ -764,23 +926,23 @@ class BSQCodebook(nn.Module):
         Codebook.
 
     """
+
     def __init__(
-            self,
-            codebook_dim: int,
-            ):
+        self,
+        codebook_dim: int,
+    ) -> None:
         super().__init__()
         self.codebook_dim = codebook_dim
-        self.codebook_size = 2 ** codebook_dim
-        self.register_buffer("mask", 2 ** torch.arange(codebook_dim-1, -1, -1))
+        self.codebook_size = 2**codebook_dim
+        self.register_buffer("mask", 2 ** torch.arange(codebook_dim - 1, -1, -1))
         all_codes = torch.arange(self.codebook_size)
         bits = ((all_codes[..., None].int() & self.mask) != 0).float()
-        codebook = self.bits_to_codes(bits) 
+        codebook = self.bits_to_codes(bits)
         self.register_buffer("codebook", codebook.float(), persistent=False)
 
     @staticmethod
-    def bits_to_codes(bits):
-        """
-        Convert bits to codes, which are bits of either 0 or 1.
+    def bits_to_codes(bits: torch.Tensor) -> torch.Tensor:
+        """Convert bits to codes, which are bits of either 0 or 1.
 
         Parameters
         ----------
@@ -790,7 +952,7 @@ class BSQCodebook(nn.Module):
         Returns
         -------
         torch.Tensor
-            Codes, which are bits depending on codebook_dim(dimmension of the sphery)
+            Codes, which are bits depending on codebook_dim(dimension of the sphery)
 
         Examples
         --------
@@ -807,12 +969,12 @@ class BSQCodebook(nn.Module):
 
         """
         bits = bits * 2 - 1
-        return F.normalize(bits, dim = -1)
+        return F.normalize(bits, dim=-1)
 
     def indices_to_codes(
         self,
         indices: torch.Tensor,
-        ):
+    ) -> torch.Tensor:
         """
         Convert indices to codes, which are bits of either -1 or 1.
 
@@ -824,7 +986,7 @@ class BSQCodebook(nn.Module):
         Returns
         -------
         torch.Tensor
-            Codes, which are bits depending on codebook_dim(dimmension of the sphery)
+            Codes, which are bits depending on codebook_dim(dimension of the sphery)
 
         Examples
         --------
@@ -841,10 +1003,10 @@ class BSQCodebook(nn.Module):
 
         bits = ((indices[..., None].int() & self.mask) != 0).float()
 
-        codes = self.bits_to_codes(bits)
+        return self.bits_to_codes(bits)
 
-        return codes
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

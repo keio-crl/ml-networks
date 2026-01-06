@@ -1,11 +1,9 @@
-from __future__ import annotations
-from collections.abc import Iterable
+"""コールバックを扱うモジュール."""
 
-import pytorch_lightning as pl
-import torch
+from __future__ import annotations
+
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-
 
 
 class ProgressBarCallback(RichProgressBar):
@@ -29,5 +27,3 @@ class ProgressBarCallback(RichProgressBar):
             metrics="grey82",
         )
         super().__init__(theme=theme)
-
-

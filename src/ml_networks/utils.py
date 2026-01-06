@@ -1,30 +1,41 @@
-from __future__ import annotations
-import random
-from collections.abc import Callable, Iterator
+"""ユーティリティ関数を扱うモジュール."""
 
+from __future__ import annotations
+
+import random
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import blosc2
+import numpy as np
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 import pytorch_lightning as pl
 import pytorch_optimizer
 import schedulefree
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-import blosc2
-import numpy as np
 from torchvision import transforms
+
 from ml_networks.config import SoftmaxTransConfig
-from einops import rearrange
+
 
 class MinMaxNormalize(transforms.Normalize):
-    def __init__(self, min: float, max: float, old_min: float = 0.0, old_max: float = 1.0) -> None:
+    """MinMax正規化変換."""
+
+    def __init__(self, min_val: float, max_val: float, old_min: float = 0.0, old_max: float = 1.0) -> None:
         """
         MinMaxNormalizeの初期化.
 
         Args:
         -----
-        min : float
+        min_val : float
             最小値.
-        max : float
+        max_val : float
             最大値.
         old_min : float
             元の最小値.
@@ -33,22 +44,20 @@ class MinMaxNormalize(transforms.Normalize):
 
 
         """
-        scale = (max - min) / (old_max - old_min)
-        shift = min - old_min * scale          # new = scale·x + shift
+        scale = (max_val - min_val) / (old_max - old_min)
+        shift = min_val - old_min * scale  # new = scale·x + shift
 
-        #   Normalize does (x − mean)/std  ⇒  x · (1/std)  − mean/std
-        mean = -shift / scale                      # invert the affine form
-        std  = 1.0 / scale
+        #   Normalize does (x - mean)/std  =>  x · (1/std)  - mean/std
+        mean = -shift / scale  # invert the affine form
+        std = 1.0 / scale
 
-        super().__init__(mean=[mean]*3, std=[std]*3)
-        self.min = min
-        self.max = max
-
+        super().__init__(mean=[mean] * 3, std=[std] * 3)
+        self.min = min_val
+        self.max = max_val
 
 
 def save_blosc2(path: str, x: np.ndarray) -> None:
-    """
-    Save numpy array with blosc2 compression.
+    """Save numpy array with blosc2 compression.
 
     Args:
     -----
@@ -57,22 +66,16 @@ def save_blosc2(path: str, x: np.ndarray) -> None:
     x : np.ndarray
         Numpy array to save.
 
-    Returns
-    -------
-    None
-
     Examples
     --------
     >>> save_blosc2("test.blosc2", np.random.randn(10, 10))
 
     """
-    with open(path, "wb") as f:
-        f.write(blosc2.pack_array2(x))
+    Path(path).write_bytes(blosc2.pack_array2(x))
 
 
 def load_blosc2(path: str) -> np.ndarray:
-    """
-    Load numpy array with blosc2 compression.
+    """Load numpy array with blosc2 compression.
 
     Args:
     -----
@@ -90,8 +93,8 @@ def load_blosc2(path: str) -> np.ndarray:
     >>> type(data)
     <class 'numpy.ndarray'>
     """
-    with open(path, "rb") as f:
-        return blosc2.unpack_array2(f.read())
+    return blosc2.unpack_array2(Path(path).read_bytes())
+
 
 def conv_out(h_in: int, padding: int, kernel_size: int, stride: int, dilation: int = 1) -> int:
     """
@@ -633,10 +636,12 @@ def seed_worker(_worker_id: int) -> None:
 
 
 class SoftmaxTransformation:
+    """Softmax変換クラス."""
+
     def __init__(
-        self, 
-        cfg: SoftmaxTransConfig
-        ):
+        self,
+        cfg: SoftmaxTransConfig,
+    ) -> None:
         """
         SoftmaxTransformationの初期化.
 
@@ -645,8 +650,7 @@ class SoftmaxTransformation:
         cfg : SoftmaxTransConfig
             SoftmaxTransformationの設定.
         """
-
-        super(SoftmaxTransformation, self).__init__()
+        super().__init__()
         self.vector = cfg.vector
         self.sigma = cfg.sigma
         self.n_ignore = cfg.n_ignore
@@ -654,14 +658,13 @@ class SoftmaxTransformation:
         self.min = cfg.min
         self.k = torch.linspace(self.min, self.max, self.vector)
 
-
-    def __call__(self, x: torch.Tensor):
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return self.transform(x)
 
-    def get_transformed_dim(self, dim: int):
+    def get_transformed_dim(self, dim: int) -> int:
         return (dim - self.n_ignore) * self.vector + self.n_ignore
 
-    def transform(self, x: torch.Tensor):
+    def transform(self, x: torch.Tensor) -> torch.Tensor:
         """
         SoftmaxTransformationの実行.
 
@@ -693,24 +696,20 @@ class SoftmaxTransformation:
         *batch, dim = x.shape
         x = x.reshape(-1, dim)
         if self.n_ignore:
-            data, ignored = x[:, :-self.n_ignore], x[:, -self.n_ignore:]
+            data, ignored = x[:, : -self.n_ignore], x[:, -self.n_ignore :]
         else:
             data = x
 
-        negative = torch.stack(
-            [torch.exp((-(data-self.k[v])**2)/self.sigma) for v in range(self.vector)])
+        negative = torch.stack([torch.exp((-((data - self.k[v]) ** 2)) / self.sigma) for v in range(self.vector)])
         negative_sum = negative.sum(dim=0)
-        
-        transformed = negative/(negative_sum+1e-8)
-        transformed = rearrange(transformed, 'v b d -> b (d v)')
 
-        if self.n_ignore:
-            transformed = torch.cat([transformed, ignored], dim=-1)
-        else:
-            transformed = transformed
+        transformed = negative / (negative_sum + 1e-8)
+        transformed = rearrange(transformed, "v b d -> b (d v)")
+
+        transformed = torch.cat([transformed, ignored], dim=-1) if self.n_ignore else transformed
         return transformed.reshape(*batch, self.get_transformed_dim(dim))
 
-    def inverse(self, x: torch.Tensor):
+    def inverse(self, x: torch.Tensor) -> torch.Tensor:
         """
         SoftmaxTransformationの逆変換.
 
@@ -725,25 +724,22 @@ class SoftmaxTransformation:
             出力テンソル.
 
         """
-
         *batch, dim = x.shape
         x = x.reshape(-1, dim)
         if self.n_ignore:
-            data, ignored = x[:, :-self.n_ignore], x[:, -self.n_ignore:]
+            data, ignored = x[:, : -self.n_ignore], x[:, -self.n_ignore :]
         else:
             data = x
 
         data = data.reshape([len(data), -1, self.vector])
 
-        data = rearrange(data, 'b d v -> v b d')
+        data = rearrange(data, "b d v -> v b d")
 
-        data = torch.stack([data[v]*self.k[v] for v in range(self.vector)]).sum(dim=0)
+        data = torch.stack([data[v] * self.k[v] for v in range(self.vector)]).sum(dim=0)
 
-        if self.n_ignore:
-            data = torch.cat([data, ignored], dim=-1)
-        else:
-            data = data
+        data = torch.cat([data, ignored], dim=-1) if self.n_ignore else data
         return data.reshape(*batch, -1)
+
 
 if __name__ == "__main__":
     import doctest

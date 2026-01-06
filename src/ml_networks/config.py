@@ -1,42 +1,62 @@
+"""設定を扱うモジュール."""
+
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Tuple, Union, Optional
+from typing import Any, Literal
 
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import ListConfig, OmegaConf, dictConfig
 
 
-def load_config(path: str) -> Union[DictConfig, ListConfig]:
+def load_config(path: str) -> dictConfig | ListConfig:
     """
-    Convert model config `.yaml` to `Dictconfig` with custom resolvers.
+    Convert model config `.yaml` to `dictconfig` with custom resolvers.
 
     Returns
     -------
-    DictConfig
+    dictConfig
     """
     return OmegaConf.load(Path(path))
 
-def convert_dictconfig_to_dict(obj):
-    """Recursively convert DictConfig to dict in any iterable object."""
-    if isinstance(obj, DictConfig):
+
+def convert_dictconfig_to_dict(obj: Any) -> Any:
+    """Recursively convert dictConfig to dict in any iterable object.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to convert.
+
+    Returns
+    -------
+    Any
+        Converted object.
+    """
+    if isinstance(obj, dictConfig):
         return dict(obj)
-    elif isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):
         return type(obj)(convert_dictconfig_to_dict(item) for item in obj)
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {k: convert_dictconfig_to_dict(v) for k, v in obj.items()}
     return obj
 
+
 @dataclass
 class ContrastiveLearningConfig:
+    """Contrastive learning configuration."""
+
     dim_feature: int
     eval_func: MLPConfig
-    dim_input2: Optional[int] = None
+    dim_input2: int | None = None
     cross_entropy_like: bool = False
+
 
 @dataclass
 class AttentionConfig:
     """
     Attention configuration.
+
     Attributes
     ----------
     nhead : int
@@ -44,6 +64,7 @@ class AttentionConfig:
     patch_size : int
         Patch size.
     """
+
     nhead: int
     patch_size: int
 
@@ -52,6 +73,7 @@ class AttentionConfig:
 class SoftmaxTransConfig:
     """
     Softmax transformation configuration.
+
     Attributes
     ----------
     vector : int
@@ -65,11 +87,13 @@ class SoftmaxTransConfig:
     min : float
         Minimum value. Default is -1.0.
     """
+
     vector: int
     sigma: float
     n_ignore: int = 0
     max: float = 1.0
     min: float = -1.0
+
 
 @dataclass
 class ConvConfig:
@@ -120,7 +144,7 @@ class ConvConfig:
     padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
     dropout: float = 0.0
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: Dict[str, Any] = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     norm_first: bool = False
     scale_factor: int = 0
 
@@ -131,25 +155,13 @@ class ConvConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `ConvConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of ConvConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `ConvConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
 
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-        
 
 
 @dataclass
@@ -168,9 +180,9 @@ class ConvNetConfig:
         Initial number of channels, especially for transposed convolution.
     """
 
-    channels: Tuple[int, ...]
-    conv_cfgs: Tuple[ConvConfig, ...]
-    attention: AttentionConfig = None
+    channels: tuple[int, ...]
+    conv_cfgs: tuple[ConvConfig, ...]
+    attention: AttentionConfig | None = None
     init_channel: int = 16
 
     def __post_init__(self) -> None:
@@ -178,29 +190,19 @@ class ConvNetConfig:
         self.conv_cfgs = tuple(self.conv_cfgs)
         self.channels = tuple(self.channels)
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `ConvNetConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of ConvNetConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `ConvNetConfig`."""
         self.channels = tuple(self.channels)
         conv_cfgs = []
-        for conv_cfg in self.conv_cfgs:
-            if isinstance(conv_cfg, DictConfig):
+        for cfg_item in self.conv_cfgs:
+            conv_cfg = cfg_item
+            if isinstance(conv_cfg, dictConfig):
                 conv_cfg = ConvConfig(**conv_cfg)
             conv_cfg.dictcfg2dict()
             conv_cfgs.append(conv_cfg)
         self.conv_cfgs = tuple(conv_cfgs)
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -250,11 +252,11 @@ class ResNetConfig:
     scale_factor: int = 2
     n_scaling: int = 2
     norm: Literal["batch", "group", "none"] = "none"
-    norm_cfg: Dict[str, Any] = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     init_channel: int = 16
     padding_mode: Literal["zeros", "reflect", "replicate", "circular"] = "zeros"
-    attention: AttentionConfig = None
+    attention: AttentionConfig | None = None
 
     def __post_init__(self) -> None:
         """Set `norm_cfg`."""
@@ -263,28 +265,19 @@ class ResNetConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `ResNetConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of ResNetConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `ResNetConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
-                setattr(self, key, convert_dictconfig_to_dict(value))
+
 
 @dataclass
 class UNetConfig:
     """
     UNet configuration.
+
     Attributes
     ----------
     channels : Tuple[int, ...]
@@ -308,21 +301,23 @@ class UNetConfig:
         Hypernetwork configuration. If it's set to None, hypernetwork is not used.
         Default is None.
     """
-    channels: Tuple[int, ...]
+
+    channels: tuple[int, ...]
     conv_cfg: ConvConfig
     cond_pred_scale: bool = False
-    nhead: Optional[int] = None
+    nhead: int | None = None
     has_attn: bool = False
     use_shuffle: bool = False
     use_hypernet: bool = False
-    hyper_mlp_cfg: Optional[MLPConfig] = None
-    
+    hyper_mlp_cfg: MLPConfig | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Post-initialization processing."""
         if self.has_attn:
             assert self.nhead is not None, "nhead must be specified when has_attn is True."
-        if isinstance(self.channels, list) or isinstance(self.channels, ListConfig):
+        if isinstance(self.channels, (list, ListConfig)):
             self.channels = tuple(self.channels)
+
 
 @dataclass
 class LinearConfig:
@@ -347,7 +342,7 @@ class LinearConfig:
 
     activation: str
     norm: Literal["layer", "rms", "none"] = "none"
-    norm_cfg: Dict[str, Any] = field(default_factory=dict)
+    norm_cfg: dict[str, Any] = field(default_factory=dict)
     dropout: float = 0.0
     norm_first: bool = False
     bias: bool = True
@@ -359,23 +354,13 @@ class LinearConfig:
         else:
             self.norm_cfg = dict(**self.norm_cfg)
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `LinearConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of LinearConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `LinearConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
-                setattr(self, key, convert_dictconfig_to_dict(value))
+
 
 @dataclass
 class MLPConfig:
@@ -400,22 +385,11 @@ class MLPConfig:
     output_activation: str
     linear_cfg: LinearConfig
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `MLPConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of MLPConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `MLPConfig`."""
         self.linear_cfg.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -475,6 +449,7 @@ class ViTConfig:
     init_channel: int = 16
     unpatchify: bool = False
 
+
 @dataclass
 class AdaptiveAveragePoolingConfig:
     """
@@ -487,14 +462,14 @@ class AdaptiveAveragePoolingConfig:
         If it's a tuple, it should contain two integers for height and width.
     """
 
-    output_size: Union[int, Tuple[int, ...]] = (1, 1)
-    additional_layer: Optional[Union[MLPConfig, LinearConfig]] = None
+    output_size: int | tuple[int, ...] = (1, 1)
+    additional_layer: (MLPConfig | LinearConfig) | None = None
 
     def __post_init__(self) -> None:
         """Ensure output_size is a tuple."""
         if isinstance(self.output_size, int):
-            self.output_size = tuple([self.output_size, self.output_size])
-        elif isinstance(self.output_size, list) or isinstance(self.output_size, ListConfig):
+            self.output_size = (self.output_size, self.output_size)
+        elif isinstance(self.output_size, (list, ListConfig)):
             self.output_size = tuple(self.output_size)
 
 
@@ -524,9 +499,10 @@ class SpatialSoftmaxConfig:
     eps: float = 1e-6
     is_argmax: bool = False
     is_straight_through: bool = False
-    additional_layer: Optional[Union[MLPConfig, LinearConfig]] = None
+    additional_layer: (MLPConfig | LinearConfig) | None = None
 
-@dataclass 
+
+@dataclass
 class EncoderConfig:
     """
     Encoder configuration.
@@ -539,28 +515,17 @@ class EncoderConfig:
         Full connection configuration.
     """
 
-    backbone: Union[ConvNetConfig, ResNetConfig]
-    full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
+    backbone: ConvNetConfig | ResNetConfig
+    full_connection: MLPConfig | LinearConfig | SpatialSoftmaxConfig
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `EncoderConfig`.
-
-        Returns
-        -------
-        dict
-            Dictionary representation of EncoderConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `EncoderConfig`."""
         if hasattr(self.backbone, "dictcfg2dict"):
             self.backbone.dictcfg2dict()
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -576,27 +541,15 @@ class DecoderConfig:
     full_connection: Union[MLPConfig, LinearConfig, SpatialSoftmaxConfig]
         Full connection configuration.
     """
-    
-    backbone: Union[ConvNetConfig, ResNetConfig]
-    full_connection: Union[MLPConfig, LinearConfig]
 
-    def dictcfg2dict(self):
-        """
-        Convert DictConfig to dict for `DecoderConfig`.
+    backbone: ConvNetConfig | ResNetConfig
+    full_connection: MLPConfig | LinearConfig
 
-        Returns
-        -------
-        dict
-            Dictionary representation of DecoderConfig.
-        """
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `DecoderConfig`."""
         self.backbone.dictcfg2dict()
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, DictConfig):
+            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
                 setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, ListConfig):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-            elif isinstance(value, (list, tuple, dict)):
-                setattr(self, key, convert_dictconfig_to_dict(value))
-

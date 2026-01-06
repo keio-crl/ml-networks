@@ -1,11 +1,15 @@
+"""視覚処理を扱うモジュール."""
 
 from __future__ import annotations
+
+from typing import Tuple, cast
+
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from torch import nn
 
+from ml_networks.base import BaseModule
 from ml_networks.config import (
     AdaptiveAveragePoolingConfig,
     ConvConfig,
@@ -17,6 +21,7 @@ from ml_networks.config import (
     ViTConfig,
 )
 from ml_networks.layers import (
+    Attention2d,
     ConvNormActivation,
     ConvTransposeNormActivation,
     LinearNormActivation,
@@ -26,10 +31,8 @@ from ml_networks.layers import (
     ResidualBlock,
     SpatialSoftmax,
     TransformerLayer,
-    Attention2d
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_transpose_out_shape
-from ml_networks.base import BaseModule
 
 
 class Encoder(BaseModule):
@@ -154,55 +157,76 @@ class Encoder(BaseModule):
                 f"{feature_dim} != {(self.encoder.last_channel, *self.encoder.conved_shape)}"
             )
         if isinstance(fc_cfg, MLPConfig):
+            assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
             self.fc = nn.Sequential(
                 nn.Flatten(),
                 MLPLayer(self.conved_size, feature_dim, fc_cfg),
             )
         elif isinstance(fc_cfg, LinearConfig):
+            assert isinstance(feature_dim, int), "feature_dim must be int when using LinearConfig"
             self.fc = nn.Sequential(
                 nn.Flatten(),
                 LinearNormActivation(self.conved_size, feature_dim, fc_cfg),
             )
         elif isinstance(fc_cfg, AdaptiveAveragePoolingConfig):
+            assert isinstance(feature_dim, int), "feature_dim must be int when using AdaptiveAveragePoolingConfig"
             self.fc = nn.Sequential(
                 nn.AdaptiveAvgPool2d(fc_cfg.output_size),
                 nn.Flatten(),
                 LinearNormActivation(
                     int(self.last_channel * np.prod(fc_cfg.output_size)),
                     feature_dim,
-                    fc_cfg.additional_layer
-                ) if isinstance(
-                        fc_cfg.additional_layer, LinearConfig
-                ) else MLPLayer(
+                    fc_cfg.additional_layer,
+                )
+                if isinstance(
+                    fc_cfg.additional_layer,
+                    LinearConfig,
+                )
+                else MLPLayer(
                     int(self.last_channel * np.prod(fc_cfg.output_size)),
                     feature_dim,
-                    fc_cfg.additional_layer
-                ) if isinstance(
-                        fc_cfg.additional_layer, MLPConfig
-                ) else nn.Identity(),
+                    fc_cfg.additional_layer,
+                )
+                if isinstance(
+                    fc_cfg.additional_layer,
+                    MLPConfig,
+                )
+                else nn.Identity(),
             )
             if fc_cfg.additional_layer is None:
-                self.feature_dim = self.last_channel * (fc_cfg.output_size**2) if isinstance(
-                    fc_cfg.output_size, int
-                ) else self.last_channel * np.prod(fc_cfg.output_size)
-        
+                self.feature_dim = (
+                    self.last_channel * (fc_cfg.output_size**2)
+                    if isinstance(
+                        fc_cfg.output_size,
+                        int,
+                    )
+                    else self.last_channel * np.prod(fc_cfg.output_size)
+                )
+
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
+            assert isinstance(self.feature_dim, int), "feature_dim must be int when using SpatialSoftmaxConfig"
             self.fc = nn.Sequential(
                 SpatialSoftmax(fc_cfg),
                 nn.Flatten(),
                 LinearNormActivation(
                     self.last_channel * 2,
                     self.feature_dim,
-                    fc_cfg.additional_layer
-                ) if isinstance(
-                        fc_cfg.additional_layer, LinearConfig
-                ) else MLPLayer(
+                    fc_cfg.additional_layer,
+                )
+                if isinstance(
+                    fc_cfg.additional_layer,
+                    LinearConfig,
+                )
+                else MLPLayer(
                     self.last_channel * 2,
                     self.feature_dim,
-                    fc_cfg.additional_layer
-                ) if isinstance(
-                        fc_cfg.additional_layer, MLPConfig
-                ) else nn.Identity(),
+                    fc_cfg.additional_layer,
+                )
+                if isinstance(
+                    fc_cfg.additional_layer,
+                    MLPConfig,
+                )
+                else nn.Identity(),
             )
             if fc_cfg.additional_layer is None:
                 self.feature_dim = self.last_channel * 2
@@ -352,16 +376,17 @@ class Decoder(BaseModule):
         self.feature_dim = feature_dim
 
         if isinstance(backbone_cfg, ViTConfig):
-            decoder = ViT
+            decoder: type[ViT | ConvTranspose | ResNetPixShuffle] = ViT  # type: ignore[assignment]
+            self.input_shape: tuple[int, int, int] = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
         elif isinstance(backbone_cfg, ConvNetConfig):
-            decoder = ConvTranspose
+            decoder = ConvTranspose  # type: ignore[assignment]
+            self.input_shape = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
         elif isinstance(backbone_cfg, ResNetConfig):
-            decoder = ResNetPixShuffle
+            decoder = ResNetPixShuffle  # type: ignore[assignment]
+            self.input_shape = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
         else:
             msg = f"{type(backbone_cfg)} is not implemented"
             raise NotImplementedError(msg)
-
-        self.input_shape = decoder.get_input_shape(obs_shape, backbone_cfg)
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is provided"
             self.has_fc = True
@@ -370,13 +395,20 @@ class Decoder(BaseModule):
             self.has_fc = False
 
         if isinstance(fc_cfg, MLPConfig):
-            self.fc = MLPLayer(feature_dim, np.prod(self.input_shape), fc_cfg)
+            assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
+            self.fc = MLPLayer(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
         elif isinstance(fc_cfg, LinearConfig):
-            self.fc = LinearNormActivation(feature_dim, np.prod(self.input_shape), fc_cfg)
+            assert isinstance(feature_dim, int), "feature_dim must be int when using LinearConfig"
+            self.fc = LinearNormActivation(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
         else:
             self.fc = nn.Identity()
 
-        self.decoder = decoder(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+        if isinstance(backbone_cfg, ViTConfig):
+            self.decoder = ViT(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+        elif isinstance(backbone_cfg, ConvNetConfig):
+            self.decoder = ConvTranspose(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+        elif isinstance(backbone_cfg, ResNetConfig):
+            self.decoder = ResNetPixShuffle(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -480,13 +512,13 @@ class ViT(nn.Module):
         self.should_unpatchify = cfg.unpatchify
         if cfg.cls_token:
             self.cls_token = nn.Parameter(torch.randn(1, 1, self.in_patch_dim))
-        self.last_channel = self.get_n_patches(in_shape) 
+        self.last_channel = self.get_n_patches(in_shape)
 
     def forward(
         self,
         x: torch.Tensor,
         return_cls_token: bool = False,
-        ) -> torch.Tensor: 
+    ) -> torch.Tensor:
         """
         Forward pass.
 
@@ -524,8 +556,8 @@ class ViT(nn.Module):
         """
         画像をパッチに分割する.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         imgs: torch.Tensor
             入力画像. (N, C, H, W)
 
@@ -566,7 +598,7 @@ class ViT(nn.Module):
 
     @property
     def conved_shape(self) -> tuple[int, int]:
-        return (self.out_patch_dim, )
+        return (self.out_patch_dim, self.out_patch_dim)
 
     def get_n_patches(self, obs_shape: tuple[int, int, int]) -> int:
         return (obs_shape[1] // self.patch_size) * (obs_shape[2] // self.patch_size)
@@ -634,7 +666,7 @@ class ResNetPixUnshuffle(nn.Module):
             dropout=cfg.dropout,
             norm=cfg.norm,
             norm_cfg=cfg.norm_cfg,
-            padding_mode=cfg.padding_mode
+            padding_mode=cfg.padding_mode,
         )
         # First layer
         self.conv1 = ConvNormActivation(self.obs_shape[0], cfg.conv_channel, first_cfg)
@@ -654,18 +686,20 @@ class ResNetPixUnshuffle(nn.Module):
         # Residual blocks
         res_blocks = []
         for _ in range(cfg.n_res_blocks):
-            res_blocks += [ResidualBlock(
-                cfg.conv_channel,
-                cfg.conv_kernel,
-                cfg.conv_activation,
-                cfg.norm,
-                cfg.norm_cfg,
-                cfg.dropout,
-                cfg.padding_mode
-            )]
+            res_blocks += [
+                ResidualBlock(
+                    cfg.conv_channel,
+                    cfg.conv_kernel,
+                    cfg.conv_activation,
+                    cfg.norm,
+                    cfg.norm_cfg,
+                    cfg.dropout,
+                    cfg.padding_mode,
+                ),
+            ]
             if cfg.attention is not None:
-                res_blocks += [Attention2d(cfg.conv_channel, attn_cfg=cfg.attention)]
-       
+                res_blocks += [Attention2d(cfg.conv_channel, nhead=None, attn_cfg=cfg.attention)]
+
         self.res_blocks = nn.Sequential(*res_blocks)
 
         cov2_cfg = first_cfg
@@ -814,7 +848,7 @@ class ConvNet(nn.Module):
         for i in range(len(self.channels) - 1):
             convs += [ConvNormActivation(self.channels[i], self.channels[i + 1], self.cfg.conv_cfgs[i])]
             if self.cfg.attention is not None:
-                convs += [Attention2d(self.channels[i + 1], attn_cfg=self.cfg.attention)]
+                convs += [Attention2d(self.channels[i + 1], nhead=None, attn_cfg=self.cfg.attention)]
 
         return nn.Sequential(*convs)
 
@@ -861,7 +895,7 @@ class ConvNet(nn.Module):
         (8, 8)
 
         """
-        conv_shape = self.obs_shape[1:]
+        conv_shape: tuple[int, ...] = self.obs_shape[1:]
         for i in range(len(self.channels) - 1):
             padding, kernel, stride, dilation = (
                 self.cfg.conv_cfgs[i].padding,
@@ -871,7 +905,9 @@ class ConvNet(nn.Module):
             )
             conv_shape = conv_out_shape(conv_shape, padding, kernel, stride, dilation)
 
-        return conv_shape
+        assert len(conv_shape) == 2, f"Expected 2D shape, got {conv_shape}"
+
+        return cast("Tuple[int, int]", conv_shape)
 
     @property
     def conved_size(self) -> int:
@@ -979,17 +1015,18 @@ class ResNetPixShuffle(nn.Module):
         res_blocks = []
         for _ in range(self.n_res_blocks):
             res_blocks += [
-            ResidualBlock(
-                self.conv_channel,
-                self.conv_kernel,
-                self.conv_activation,
-                self.norm,
-                self.norm_cfg,
-                self.dropout,
-                cfg.padding_mode
-            )]
+                ResidualBlock(
+                    self.conv_channel,
+                    self.conv_kernel,
+                    self.conv_activation,
+                    self.norm,
+                    self.norm_cfg,
+                    self.dropout,
+                    cfg.padding_mode,
+                ),
+            ]
             if cfg.attention is not None:
-                res_blocks += [Attention2d(self.conv_channel, attn_cfg=cfg.attention)]
+                res_blocks += [Attention2d(self.conv_channel, nhead=None, attn_cfg=cfg.attention)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # Second conv layer post residual blocks
@@ -1147,7 +1184,7 @@ class ConvTranspose(nn.Module):
             self.init_channel = in_shape[0]
             self.have_first_conv = False
 
-        prev_shape = in_shape[1:]
+        prev_shape: tuple[int, int] = tuple(in_shape[1:])  # type: ignore[assignment]
         for conv_cfg in cfg.conv_cfgs:
             padding, kernel, stride, dilation = (
                 conv_cfg.padding,
@@ -1155,7 +1192,7 @@ class ConvTranspose(nn.Module):
                 conv_cfg.stride,
                 conv_cfg.dilation,
             )
-            prev_shape = conv_transpose_out_shape(prev_shape, padding, kernel, stride, dilation)
+            prev_shape = tuple(conv_transpose_out_shape(prev_shape, padding, kernel, stride, dilation))  # type: ignore[assignment]
             self.conv_out_shapes += [prev_shape]
         assert self.conv_out_shapes[-1] == obs_shape[1:], f"{self.conv_out_shapes[-1]} != {obs_shape[1:]}"
 
@@ -1185,7 +1222,7 @@ class ConvTranspose(nn.Module):
         convs = []
         for i, cfg in enumerate(self.cfg.conv_cfgs):
             if self.cfg.attention is not None:
-                convs += [Attention2d(self.channels[i], attn_cfg=self.cfg.attention)]
+                convs += [Attention2d(self.channels[i], nhead=None, attn_cfg=self.cfg.attention)]
             convs += [ConvTransposeNormActivation(self.channels[i], self.channels[i + 1], cfg)]
         return nn.Sequential(*convs)
 
@@ -1220,7 +1257,7 @@ class ConvTranspose(nn.Module):
         >>> ConvTranspose.get_input_shape(obs_shape, cfg)
         (16, 8, 8)
         """
-        in_shape = obs_shape[1:]
+        in_shape: tuple[int, int] = tuple(obs_shape[1:])  # type: ignore[assignment]
         for conv_cfg in reversed(cfg.conv_cfgs):
             padding, kernel, stride, dilation = (
                 conv_cfg.padding,
@@ -1228,5 +1265,5 @@ class ConvTranspose(nn.Module):
                 conv_cfg.stride,
                 conv_cfg.dilation,
             )
-            in_shape = conv_transpose_in_shape(in_shape, padding, kernel, stride, dilation)
+            in_shape = tuple(conv_transpose_in_shape(in_shape, padding, kernel, stride, dilation))  # type: ignore[assignment]
         return (cfg.init_channel, *in_shape)

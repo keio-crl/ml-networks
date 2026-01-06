@@ -1,0 +1,100 @@
+site_name: ml-networks
+site_description: PyTorchベースの深層学習モデル構築を支援するライブラリ
+site_author: oakwood-fujiken, nomutin
+site_url: https://github.com/keio-crl/ml-networks
+
+repo_name: keio-crl/ml-networks
+repo_url: https://github.com/keio-crl/ml-networks
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_root_full_path: false
+            show_root_heading: true
+            show_object_full_path: false
+            show_category_heading: true
+            show_if_no_docstring: true
+            separate_signature: true
+            line_length: 120
+            merge_init_into_class: true
+
+nav:
+  - Home: index.md
+  - クイックスタート: getting-started.md
+  - ガイド:
+    - 設定管理: guides/config-management.md
+    - MLP: guides/mlp.md
+    - Encoder: guides/encoder.md
+    - Decoder: guides/decoder.md
+    - Distributions: guides/distributions.md
+    - 損失関数: guides/loss-functions.md
+    - データの保存と読み込み: guides/data-io.md
+    - その他の便利な機能: guides/utilities.md
+  - API リファレンス:
+    - 概要: api/index.md
+    - レイヤー: api/layers.md
+    - ビジョン: api/vision.md
+    - 分布: api/distributions.md
+    - 損失関数: api/loss.md
+    - 設定: api/config.md
+    - ユーティリティ: api/utils.md
+    - 活性化関数: api/activations.md
+    - UNet: api/unet.md
+    - その他: api/others.md
+  - 開発: development.md
