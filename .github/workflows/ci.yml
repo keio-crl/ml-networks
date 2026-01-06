@@ -2,49 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-  pull_request:
-
-jobs:
-  tests:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install uv
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-
-      - name: Install dependencies
-        run: |
-          uv sync --all-extras --dev
-
-      - name: Run lint (ruff)
-        run: |
-          uv run ruff check .
-
-      - name: Run type check (mypy)
-        run: |
-          uv run mypy src
-
-      - name: Run tests (pytest)
-        run: |
-          uv run pytest
-
-name: CI
-
-on:
-  push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
@@ -59,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
@@ -81,7 +38,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
@@ -97,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.10']
     steps:
       - uses: actions/checkout@v4
 
@@ -126,7 +83,7 @@ jobs:
           pytest --cov=src/ml_networks --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
-        if: steps.check_tests.outputs.has_tests == 'true' && matrix.python-version == '3.8'
+        if: steps.check_tests.outputs.has_tests == 'true' && matrix.python-version == '3.10'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
@@ -148,7 +105,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: Install build dependencies
         run: |
