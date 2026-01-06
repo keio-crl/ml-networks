@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.func as tf
@@ -20,6 +20,8 @@ from ml_networks.layers import (
     HorizonShuffle,
     HorizonUnShuffle,
 )
+
+DownBlock = tuple[nn.Module, nn.Module, nn.Module, nn.Module]
 
 
 class ConditionalUnet2d(nn.Module):
@@ -140,8 +142,10 @@ class ConditionalUnet2d(nn.Module):
             nn.Conv2d(start_dim, obs_shape[0], 1),
         )
 
-        self.up_modules = up_modules
-        self.down_modules = down_modules
+        # ModuleList は型情報を持たないので、mypy に対してはより具体的な
+        # list[DownBlock] として扱うように cast する
+        self.up_modules = cast("list[DownBlock]", up_modules)
+        self.down_modules = cast("list[DownBlock]", down_modules)
         self.final_conv = final_conv
 
     def forward(
@@ -174,7 +178,7 @@ class ConditionalUnet2d(nn.Module):
         x = base
         h: list[torch.Tensor] = []
         for modules in self.down_modules:
-            resnet, attn, resnet2, downsample = tuple(modules)  # type: ignore[misc]
+            resnet, attn, resnet2, downsample = modules
             x = resnet(x, global_feature)
             x = attn(x)
             x = resnet2(x, global_feature)
@@ -185,7 +189,7 @@ class ConditionalUnet2d(nn.Module):
             x = mid_module(x, global_feature)
 
         for modules in self.up_modules:
-            resnet, attn, resnet2, upsample = tuple(modules)  # type: ignore[misc]
+            resnet, attn, resnet2, upsample = modules
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = attn(x)
@@ -361,8 +365,11 @@ class ConditionalUnet1d(nn.Module):
             ConvNormActivation1d(start_dim, start_dim, cfg.conv_cfg),
             nn.Conv1d(start_dim, obs_shape[0], 1),
         )
-        self.up_modules = up_modules
-        self.down_modules = down_modules
+
+        # ModuleList は型情報を持たないので、mypy に対してはより具体的な
+        # list[DownBlock] として扱うように cast する
+        self.up_modules = cast("list[DownBlock]", up_modules)
+        self.down_modules = cast("list[DownBlock]", down_modules)
         self.final_conv = final_conv
 
     def forward(
@@ -395,7 +402,7 @@ class ConditionalUnet1d(nn.Module):
         x = base
         h: list[torch.Tensor] = []
         for modules in self.down_modules:
-            resnet, attn, resnet2, downsample = tuple(modules)  # type: ignore[misc]
+            resnet, attn, resnet2, downsample = modules
             x = resnet(x, global_feature)
             x = attn(x)
             x = resnet2(x, global_feature)
@@ -406,7 +413,7 @@ class ConditionalUnet1d(nn.Module):
             x = mid_module(x) if isinstance(mid_module, nn.Identity) else mid_module(x, global_feature)
 
         for modules in self.up_modules:
-            resnet, attn, resnet2, upsample = tuple(modules)  # type: ignore[misc]
+            resnet, attn, resnet2, upsample = modules
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = attn(x)

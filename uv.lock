@@ -1170,7 +1170,7 @@ dependencies = [
     { name = "torchvision" },
 ]
 
-[package.dev-dependencies]
+[package.optional-dependencies]
 dev = [
     { name = "codespell" },
     { name = "ipython" },
@@ -1191,36 +1191,31 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.4.1" },
     { name = "einops", specifier = ">=0.8.1" },
+    { name = "ipython", marker = "extra == 'dev'", specifier = "<=8.33.0" },
     { name = "kornia", specifier = ">=0.7.3" },
+    { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
+    { name = "mkdocs-git-revision-date-localized-plugin", marker = "extra == 'docs'", specifier = ">=1.4.7" },
+    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.7.1" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.26.1" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15.0" },
     { name = "natsort", specifier = ">=8.4.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
+    { name = "pip", marker = "extra == 'dev'", specifier = ">=25.3" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = "<=6.0.0" },
     { name = "pytorch-lightning", specifier = ">=2.4.0" },
     { name = "pytorch-optimizer", specifier = ">=3.4.2" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.10" },
     { name = "schedulefree", specifier = ">=1.4" },
     { name = "torch", specifier = ">=2.0" },
     { name = "torchgeometry", specifier = ">=0.1.2" },
     { name = "torchvision", specifier = ">=0.19.0" },
+    { name = "types-pyserial", marker = "extra == 'dev'", specifier = ">=3.5.0.20241221" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "codespell", specifier = ">=2.4.1" },
-    { name = "ipython", specifier = "<=8.33.0" },
-    { name = "mypy", specifier = ">=1.15.0" },
-    { name = "pip", specifier = ">=25.3" },
-    { name = "pre-commit", specifier = ">=3.5.0" },
-    { name = "pytest", specifier = ">=8.3.5" },
-    { name = "pytest-cov", specifier = "<=6.0.0" },
-    { name = "ruff", specifier = ">=0.9.10" },
-    { name = "types-pyserial", specifier = ">=3.5.0.20241221" },
-]
-docs = [
-    { name = "mkdocs", specifier = ">=1.6.1" },
-    { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.4.7" },
-    { name = "mkdocs-material", specifier = ">=9.7.1" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.26.1" },
-]
+provides-extras = ["dev", "docs"]
 
 [[package]]
 name = "mpmath"
