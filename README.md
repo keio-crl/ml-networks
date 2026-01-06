@@ -45,7 +45,7 @@ uv add https://github.com/keio-crl/ml-networks.git
 ## 使用方法
 
 主要な機能の使用例を以下に示します。
-詳細なドキュメントは準備中です。
+詳細なドキュメントは[ドキュメントサイト](https://keio-crl.github.io/ml-networks/)を参照してください。
 
 ### 目次
 1. [MLP](#MLP)
