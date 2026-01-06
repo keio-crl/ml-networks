@@ -148,9 +148,9 @@ class Encoder(BaseModule):
 
         self.feature_dim = feature_dim
         # 型情報を補うために明示的にキャスト
-        self.conved_size = int(self.encoder.conved_size)
+        self.conved_size = cast("int", self.encoder.conved_size)
         self.conved_shape = cast("tuple[int, int]", self.encoder.conved_shape)
-        self.last_channel = int(self.encoder.last_channel)
+        self.last_channel = cast("int", self.encoder.last_channel)
 
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is provided"
