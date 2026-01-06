@@ -102,3 +102,11 @@ convention = "numpy"
 [tool.pydoclint]
 style = 'numpy'
 exclude = '\.git|\.ruff_cache|\.mypy_cache|\.venv'
+
+[tool.uv.sources]
+ml-networks = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ml-networks[docs]",
+]

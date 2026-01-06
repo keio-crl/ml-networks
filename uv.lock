@@ -1189,6 +1189,11 @@ docs = [
     { name = "mkdocstrings", extra = ["python"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ml-networks", extra = ["docs"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.4.1" },
@@ -1216,6 +1221,9 @@ requires-dist = [
     { name = "types-pyserial", marker = "extra == 'dev'", specifier = ">=3.5.0.20241221" },
 ]
 provides-extras = ["dev", "docs"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ml-networks", extras = ["docs"], editable = "." }]
 
 [[package]]
 name = "mpmath"
