@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Any
 
 import torch
@@ -65,7 +66,7 @@ class ConditionalUnet2d(nn.Module):
         start_dim = cfg.channels[0]
         self.obs_shape = obs_shape
 
-        in_out = list(zip(all_dims[:-1], all_dims[1:]))
+        in_out = list(pairwise(all_dims))
 
         mid_dim = all_dims[-1]
         self.mid_modules = nn.ModuleList([
@@ -238,7 +239,7 @@ class ConditionalUnet1d(nn.Module):
         start_dim = cfg.channels[0]
         self.obs_shape = obs_shape
 
-        in_out = list(zip(all_dims[:-1], all_dims[1:]))
+        in_out = list(pairwise(all_dims))
 
         mid_dim = all_dims[-1]
         self.mid_modules = nn.ModuleList([

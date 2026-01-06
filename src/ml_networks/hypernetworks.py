@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import numpy as np
 import pytorch_lightning as pl
@@ -14,9 +14,9 @@ from torch.nn import init
 from ml_networks.config import MLPConfig
 from ml_networks.layers import MLPLayer
 
-Shape = Tuple[int, ...]
+Shape = tuple[int, ...]
 
-InputMode = Optional[Literal["cos|sin", "z|1-z"]]
+InputMode = Literal["cos|sin", "z|1-z"] | None
 
 encoding_multiplier: dict[InputMode, int] = {
     None: 1,
@@ -538,7 +538,7 @@ def initialize_bias(bias: torch.Tensor, distribution: float | None = 0.0) -> Non
     if distribution is None:
         return
 
-    if isinstance(distribution, (int, float)):
+    if isinstance(distribution, int | float):
         init.constant_(bias, distribution)
         return
 
@@ -573,7 +573,7 @@ def initialize_layer(
     """
     assert isinstance(
         layer,
-        (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d),
+        nn.Linear | nn.Conv1d | nn.Conv2d | nn.Conv3d,
     ), f"Can only be applied to linear and conv layers, given {layer.__class__.__name__}"
 
     initialize_weight(layer.weight, distribution, nonlinearity)

@@ -35,7 +35,7 @@ def convert_dictconfig_to_dict(obj: Any) -> Any:
     """
     if isinstance(obj, dictConfig):
         return dict(obj)
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return type(obj)(convert_dictconfig_to_dict(item) for item in obj)
     if isinstance(obj, dict):
         return {k: convert_dictconfig_to_dict(v) for k, v in obj.items()}
@@ -160,7 +160,7 @@ class ConvConfig:
         self.norm_cfg = dict(self.norm_cfg)
 
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -202,7 +202,7 @@ class ConvNetConfig:
             conv_cfgs.append(conv_cfg)
         self.conv_cfgs = tuple(conv_cfgs)
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -269,7 +269,7 @@ class ResNetConfig:
         """Convert dictConfig to dict for `ResNetConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -315,7 +315,7 @@ class UNetConfig:
         """Post-initialization processing."""
         if self.has_attn:
             assert self.nhead is not None, "nhead must be specified when has_attn is True."
-        if isinstance(self.channels, (list, ListConfig)):
+        if isinstance(self.channels, list | ListConfig):
             self.channels = tuple(self.channels)
 
 
@@ -358,7 +358,7 @@ class LinearConfig:
         """Convert dictConfig to dict for `LinearConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -389,7 +389,7 @@ class MLPConfig:
         """Convert dictConfig to dict for `MLPConfig`."""
         self.linear_cfg.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -469,7 +469,7 @@ class AdaptiveAveragePoolingConfig:
         """Ensure output_size is a tuple."""
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
-        elif isinstance(self.output_size, (list, ListConfig)):
+        elif isinstance(self.output_size, list | ListConfig):
             self.output_size = tuple(self.output_size)
 
 
@@ -525,7 +525,7 @@ class EncoderConfig:
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -551,5 +551,5 @@ class DecoderConfig:
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, (dictConfig, ListConfig, list, tuple, dict)):
+            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))

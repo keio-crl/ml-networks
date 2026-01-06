@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Tuple, cast
+from typing import cast
 
 import numpy as np
 import torch
@@ -907,7 +907,7 @@ class ConvNet(nn.Module):
 
         assert len(conv_shape) == 2, f"Expected 2D shape, got {conv_shape}"
 
-        return cast("Tuple[int, int]", conv_shape)
+        return cast("tuple[int, int]", conv_shape)
 
     @property
     def conved_size(self) -> int:
