@@ -6,16 +6,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from omegaconf import ListConfig, OmegaConf, dictConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
-def load_config(path: str) -> dictConfig | ListConfig:
+def load_config(path: str) -> DictConfig | ListConfig:
     """
     Convert model config `.yaml` to `dictconfig` with custom resolvers.
 
     Returns
     -------
-    dictConfig
+    DictConfig
     """
     return OmegaConf.load(Path(path))
 
@@ -33,7 +33,7 @@ def convert_dictconfig_to_dict(obj: Any) -> Any:
     Any
         Converted object.
     """
-    if isinstance(obj, dictConfig):
+    if isinstance(obj, DictConfig):
         return dict(obj)
     if isinstance(obj, list | tuple):
         return type(obj)(convert_dictconfig_to_dict(item) for item in obj)
@@ -153,14 +153,14 @@ class ConvConfig:
         if self.norm == "none":
             self.norm_cfg = {}
         else:
-            self.norm_cfg = dict(**self.norm_cfg)
+            self.norm_cfg = dict(self.norm_cfg)
 
     def dictcfg2dict(self) -> None:
         """Convert dictConfig to dict for `ConvConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
 
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -196,13 +196,14 @@ class ConvNetConfig:
         conv_cfgs = []
         for cfg_item in self.conv_cfgs:
             conv_cfg = cfg_item
-            if isinstance(conv_cfg, dictConfig):
-                conv_cfg = ConvConfig(**conv_cfg)
+            if isinstance(conv_cfg, DictConfig):
+                conv_cfg_dict = convert_dictconfig_to_dict(conv_cfg)
+                conv_cfg = ConvConfig(**conv_cfg_dict)
             conv_cfg.dictcfg2dict()
             conv_cfgs.append(conv_cfg)
         self.conv_cfgs = tuple(conv_cfgs)
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -263,13 +264,13 @@ class ResNetConfig:
         if self.norm == "none":
             self.norm_cfg = {}
         else:
-            self.norm_cfg = dict(**self.norm_cfg)
+            self.norm_cfg = dict(self.norm_cfg)
 
     def dictcfg2dict(self) -> None:
         """Convert dictConfig to dict for `ResNetConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -352,13 +353,13 @@ class LinearConfig:
         if self.norm == "none":
             self.norm_cfg = {}
         else:
-            self.norm_cfg = dict(**self.norm_cfg)
+            self.norm_cfg = dict(self.norm_cfg)
 
     def dictcfg2dict(self) -> None:
         """Convert dictConfig to dict for `LinearConfig`."""
         self.norm_cfg = dict(self.norm_cfg)
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -389,7 +390,7 @@ class MLPConfig:
         """Convert dictConfig to dict for `MLPConfig`."""
         self.linear_cfg.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -525,7 +526,7 @@ class EncoderConfig:
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))
 
 
@@ -551,5 +552,5 @@ class DecoderConfig:
         if hasattr(self.full_connection, "dictcfg2dict"):
             self.full_connection.dictcfg2dict()
         for key, value in self.__dict__.items():
-            if isinstance(value, dictConfig | ListConfig | list | tuple | dict):
+            if isinstance(value, DictConfig | ListConfig | list | tuple | dict):
                 setattr(self, key, convert_dictconfig_to_dict(value))

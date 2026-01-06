@@ -78,7 +78,7 @@ class FocalFrequencyLoss:
             freq = torch.fft.fft2(y, norm="ortho")
             freq = torch.stack([freq.real, freq.imag], -1)
         else:
-            freq = torch.rfft(y, 2, onesided=False, normalized=True)
+            freq = torch.rfft(y, 2, onesided=False, normalized=True)  # type: ignore[attr-defined]
         return freq
 
     def loss_formulation(

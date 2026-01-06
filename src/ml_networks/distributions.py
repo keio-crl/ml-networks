@@ -28,14 +28,14 @@ def get_dist(state: StochState) -> D.Independent:
         与えられた状態に対応する`torch.distributions.Independent`オブジェクト。
     """
     if isinstance(state, NormalStoch):
-        dist = D.Normal(state.mean, state.std)
-        return D.Independent(dist, 1)
+        normal = D.Normal(state.mean, state.std)
+        return D.Independent(normal, 1)
     if isinstance(state, CategoricalStoch):
-        dist = D.OneHotCategoricalStraightThrough(probs=state.probs)
-        return D.Independent(dist, 1)
+        categorical = D.OneHotCategoricalStraightThrough(probs=state.probs)
+        return D.Independent(categorical, 1)
     if isinstance(state, BernoulliStoch):
-        dist = BernoulliStraightThrough(probs=state.probs)
-        return D.Independent(dist, 2)
+        bernoulli = BernoulliStraightThrough(probs=state.probs)
+        return D.Independent(bernoulli, 2)
     raise NotImplementedError
 
 
@@ -677,7 +677,7 @@ class BernoulliStraightThrough(D.Bernoulli):
 
     def rsample(
         self,
-        sample_shape: torch.Size = torch.Size(),
+        sample_shape: torch.Size | list[int] | tuple[int, ...] = torch.Size(),
     ) -> torch.Tensor:
         """
         Generate a sample from the Bernoulli distribution with Straight-Through Estimator.
@@ -790,8 +790,8 @@ class Distribution(nn.Module):
         mu, std = torch.chunk(mu_std, 2, dim=-1)
         std = F.softplus(std) + 1e-6
 
-        posterior_dist = D.Normal(mu, std)
-        posterior_dist = D.Independent(posterior_dist, 1)
+        normal_dist = D.Normal(mu, std)
+        posterior_dist = D.Independent(normal_dist, 1)
 
         sample = posterior_dist.rsample() if not deterministic else mu
 
@@ -803,8 +803,8 @@ class Distribution(nn.Module):
         logits = torch.stack(logits_chunk, dim=-2)
         logits = logits
         probs = softmax(logits, dim=-1, temperature=1 / inv_tmp)
-        posterior_dist = D.OneHotCategoricalStraightThrough(probs=probs)
-        posterior_dist = D.Independent(posterior_dist, 1)
+        dist = D.OneHotCategoricalStraightThrough(probs=probs)
+        posterior_dist = D.Independent(dist, 1)
 
         sample = posterior_dist.rsample()
 
@@ -826,8 +826,8 @@ class Distribution(nn.Module):
         logits = logits * inv_tmp
         probs = torch.sigmoid(logits)
 
-        posterior_dist = BernoulliStraightThrough(probs=probs)
-        posterior_dist = D.Independent(posterior_dist, 1)
+        dist = BernoulliStraightThrough(probs=probs)
+        posterior_dist = D.Independent(dist, 1)
 
         sample = posterior_dist.rsample()
 
@@ -934,7 +934,10 @@ class BSQCodebook(nn.Module):
         super().__init__()
         self.codebook_dim = codebook_dim
         self.codebook_size = 2**codebook_dim
-        self.register_buffer("mask", 2 ** torch.arange(codebook_dim - 1, -1, -1))
+        mask = 2 ** torch.arange(codebook_dim - 1, -1, -1)
+        self.mask: torch.Tensor
+        self.register_buffer("mask", mask)
+        self.mask = mask
         all_codes = torch.arange(self.codebook_size)
         bits = ((all_codes[..., None].int() & self.mask) != 0).float()
         codebook = self.bits_to_codes(bits)

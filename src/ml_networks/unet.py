@@ -464,7 +464,7 @@ class ConditionalResidualBlock2d(nn.Module):
             cond_channels = out_channels * 2
         self.cond_predict_scale = cond_predict_scale
         self.out_channels = out_channels
-        self.cond_encoder = nn.Sequential(
+        self.cond_encoder: nn.Module = nn.Sequential(
             nn.Linear(cond_dim, cond_channels),
             Rearrange("batch c -> batch c 1 1"),
         )
@@ -625,7 +625,7 @@ class ConditionalResidualBlock1d(nn.Module):
             cond_channels = out_channels * 2
         self.cond_predict_scale = cond_predict_scale
         self.out_channels = out_channels
-        self.cond_encoder = nn.Sequential(
+        self.cond_encoder: nn.Module = nn.Sequential(
             nn.Linear(cond_dim, cond_channels),
             Rearrange("batch c -> batch c 1"),
         )
@@ -753,6 +753,7 @@ class Downsample2d(nn.Module):
 
     def __init__(self, dim: int, use_shuffle: bool = False) -> None:
         super().__init__()
+        self.conv: nn.Module
         if use_shuffle:
             self.conv = nn.Sequential(
                 nn.PixelUnshuffle(2),
@@ -785,6 +786,7 @@ class Downsample1d(nn.Module):
 
     def __init__(self, dim: int, use_shuffle: bool = False) -> None:
         super().__init__()
+        self.conv: nn.Module
         if use_shuffle:
             self.conv = nn.Sequential(
                 HorizonUnShuffle(2),
@@ -814,6 +816,7 @@ class Upsample2d(nn.Module):
 
     def __init__(self, dim: int, use_shuffle: bool = False) -> None:
         super().__init__()
+        self.conv: nn.Module
         if use_shuffle:
             self.conv = nn.Sequential(
                 nn.Conv2d(dim, dim * 4, 3, 1, 1),
@@ -846,6 +849,7 @@ class Upsample1d(nn.Module):
 
     def __init__(self, dim: int, use_shuffle: bool = False) -> None:
         super().__init__()
+        self.conv: nn.Module
         if use_shuffle:
             self.conv = nn.Sequential(
                 nn.Conv1d(dim, dim * 2, kernel_size=3, stride=1, padding=1),

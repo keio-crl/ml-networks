@@ -68,7 +68,7 @@ class HyperNetMixin:
     output_shapes: dict[str, Shape]
     encoding: InputMode
 
-    def encode_inputs(self, inputs: dict[str, Shape]) -> dict[str, Shape]:
+    def encode_inputs(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Encode the inputs using the specified `encoding` mode.
 
         Args:
@@ -327,6 +327,7 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
         # Cache this property to avoid recomputation
         self._output_offsets = self.output_offsets()
 
+        self.backbone: nn.Module
         if fc_cfg is not None:
             self.backbone = MLPLayer(
                 self.input_dim,
@@ -380,20 +381,25 @@ class HyperNet(pl.LightningModule, HyperNetMixin):
         return self.unflatten_output(flat_output)
 
 
-def encode_input(input: torch.Tensor, mode: str = "cos|sin") -> torch.Tensor:
+def encode_input(input: torch.Tensor, mode: InputMode = "cos|sin") -> torch.Tensor:
     """Encode the input tensor based on the specified mode.
 
-    Args:
-        input (Tensor): The input tensor.
-        mode (InputMode): The encoding mode.
+    Args
+    ----
+    input : Tensor
+        The input tensor.
+    mode : InputMode
+        The encoding mode.
 
     Returns
     -------
-        Tensor: The encoded tensor.
+    Tensor
+        The encoded tensor.
 
     Raises
     ------
-        UserWarning: If the input tensor is outside the specified range in cos|sin mode.
+    ValueError
+        If an unsupported encoding mode is given.
 
     Examples
     --------
@@ -423,7 +429,8 @@ def encode_input(input: torch.Tensor, mode: str = "cos|sin") -> torch.Tensor:
 
     if mode == "z|1-z":
         return torch.cat([z, 1 - z], dim=-1)
-    return None
+    msg = f"Unsupported encoding mode: {mode}"
+    raise ValueError(msg)
 
 
 def _check_tensor_range(tensor: torch.Tensor, low: float, high: float) -> None:
@@ -447,6 +454,22 @@ def _check_tensor_range(tensor: torch.Tensor, low: float, high: float) -> None:
     """
     if (tensor < low).any() or (tensor > high).any():
         warnings.warn(f"Input tensor has dimensions outside of [{low},{high}].", stacklevel=2)
+
+
+Nonlinearity = Literal[
+    "linear",
+    "conv1d",
+    "conv2d",
+    "conv3d",
+    "conv_transpose1d",
+    "conv_transpose2d",
+    "conv_transpose3d",
+    "sigmoid",
+    "tanh",
+    "relu",
+    "leaky_relu",
+    "selu",
+]
 
 
 def initialize_weight(
@@ -480,29 +503,42 @@ def initialize_weight(
     if distribution is None:
         return
 
-    if nonlinearity:
-        nonlinearity = nonlinearity.lower()
-        if nonlinearity == "leakyrelu":
-            nonlinearity = "leaky_relu"
+    nl: Nonlinearity = "linear"
+    if nonlinearity is not None:
+        n = nonlinearity.lower()
+        if n == "leakyrelu":
+            n = "leaky_relu"
+        if n in {"silu", "gelu", "mish", "tanhexp", "elu"}:
+            n = "leaky_relu"
+        # 型チェックのために Nonlinearity に制限
+        if n in {
+            "linear",
+            "conv1d",
+            "conv2d",
+            "conv3d",
+            "conv_transpose1d",
+            "conv_transpose2d",
+            "conv_transpose3d",
+            "sigmoid",
+            "tanh",
+            "relu",
+            "leaky_relu",
+            "selu",
+        }:
+            nl = n  # type: ignore[assignment]
 
-    if nonlinearity is None:
-        nonlinearity = "linear"
-
-    if nonlinearity in ("silu", "gelu", "mish", "tanhexp", "elu"):
-        nonlinearity = "leaky_relu"
-
-    gain = 1 if nonlinearity is None else init.calculate_gain(nonlinearity)
+    gain = init.calculate_gain(nl)
 
     if distribution == "zeros":
         init.zeros_(weight)
     elif distribution == "kaiming_normal":
-        init.kaiming_normal_(weight, nonlinearity=nonlinearity)
+        init.kaiming_normal_(weight, nonlinearity=nl)
     elif distribution == "kaiming_uniform":
-        init.kaiming_uniform_(weight, nonlinearity=nonlinearity)
+        init.kaiming_uniform_(weight, nonlinearity=nl)
     elif distribution == "kaiming_normal_fanout":
-        init.kaiming_normal_(weight, nonlinearity=nonlinearity, mode="fan_out")
+        init.kaiming_normal_(weight, nonlinearity=nl, mode="fan_out")
     elif distribution == "kaiming_uniform_fanout":
-        init.kaiming_uniform_(weight, nonlinearity=nonlinearity, mode="fan_out")
+        init.kaiming_uniform_(weight, nonlinearity=nl, mode="fan_out")
     elif distribution == "glorot_normal":
         init.xavier_normal_(weight, gain=gain)
     elif distribution == "glorot_uniform":

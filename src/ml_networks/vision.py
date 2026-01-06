@@ -135,6 +135,7 @@ class Encoder(BaseModule):
 
         self.obs_shape = obs_shape
 
+        self.encoder: nn.Module
         if isinstance(backbone_cfg, ViTConfig):
             self.encoder = ViT(obs_shape, backbone_cfg)
         elif isinstance(backbone_cfg, ConvNetConfig):
@@ -146,16 +147,18 @@ class Encoder(BaseModule):
             raise NotImplementedError(msg)
 
         self.feature_dim = feature_dim
-        self.conved_size = self.encoder.conved_size
-        self.conved_shape = self.encoder.conved_shape
-        self.last_channel = self.encoder.last_channel
+        # 型情報を補うために明示的にキャスト
+        self.conved_size = int(self.encoder.conved_size)
+        self.conved_shape = cast("tuple[int, int]", self.encoder.conved_shape)
+        self.last_channel = int(self.encoder.last_channel)
 
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is provided"
         else:
-            assert feature_dim == (self.encoder.last_channel, *self.encoder.conved_shape), (
-                f"{feature_dim} != {(self.encoder.last_channel, *self.encoder.conved_shape)}"
+            assert feature_dim == (self.last_channel, *self.conved_shape), (
+                f"{feature_dim} != {(self.last_channel, *self.conved_shape)}"
             )
+        self.fc: nn.Module
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
             self.fc = nn.Sequential(
@@ -375,15 +378,19 @@ class Decoder(BaseModule):
         self.obs_shape = obs_shape
         self.feature_dim = feature_dim
 
+        self.input_shape: tuple[int, int, int]
         if isinstance(backbone_cfg, ViTConfig):
-            decoder: type[ViT | ConvTranspose | ResNetPixShuffle] = ViT  # type: ignore[assignment]
-            self.input_shape: tuple[int, int, int] = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
+            self.input_shape = ViT.get_input_shape(obs_shape, backbone_cfg)
         elif isinstance(backbone_cfg, ConvNetConfig):
-            decoder = ConvTranspose  # type: ignore[assignment]
-            self.input_shape = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
+            self.input_shape = cast(
+                "tuple[int, int, int]",
+                ConvTranspose.get_input_shape(obs_shape, backbone_cfg),
+            )
         elif isinstance(backbone_cfg, ResNetConfig):
-            decoder = ResNetPixShuffle  # type: ignore[assignment]
-            self.input_shape = decoder.get_input_shape(obs_shape, backbone_cfg)  # type: ignore[arg-type, assignment]
+            self.input_shape = cast(
+                "tuple[int, int, int]",
+                ResNetPixShuffle.get_input_shape(obs_shape, backbone_cfg),
+            )
         else:
             msg = f"{type(backbone_cfg)} is not implemented"
             raise NotImplementedError(msg)
@@ -396,7 +403,7 @@ class Decoder(BaseModule):
 
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
-            self.fc = MLPLayer(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
+            self.fc: nn.Module = MLPLayer(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
         elif isinstance(fc_cfg, LinearConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using LinearConfig"
             self.fc = LinearNormActivation(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
@@ -404,7 +411,7 @@ class Decoder(BaseModule):
             self.fc = nn.Identity()
 
         if isinstance(backbone_cfg, ViTConfig):
-            self.decoder = ViT(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+            self.decoder: nn.Module = ViT(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
         elif isinstance(backbone_cfg, ConvNetConfig):
             self.decoder = ConvTranspose(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
         elif isinstance(backbone_cfg, ResNetConfig):
@@ -537,7 +544,7 @@ class ViT(nn.Module):
             cls_token of shape (batch_size, self.out_patch_dim) if return_cls_token
 
         """
-        x = self.patch_embed(x) if self.is_encoder else self.patchfy(x)
+        x = self.patch_embed(x) if self.is_encoder else self.patchify(x)
         x = self.positional_embedding(x)
         if hasattr(self, "cls_token"):
             cls_token = self.cls_token.expand(x.shape[0], -1, -1)
@@ -672,7 +679,7 @@ class ResNetPixUnshuffle(nn.Module):
         self.conv1 = ConvNormActivation(self.obs_shape[0], cfg.conv_channel, first_cfg)
 
         # downsampling
-        downsample = []
+        downsample: list[nn.Module] = []
         downsample_cfg = first_cfg
         downsample_cfg.kernel_size = cfg.conv_kernel
         downsample_cfg.padding = cfg.conv_kernel // 2
@@ -684,7 +691,7 @@ class ResNetPixUnshuffle(nn.Module):
         self.downsample = nn.Sequential(*downsample)
 
         # Residual blocks
-        res_blocks = []
+        res_blocks: list[nn.Module] = []
         for _ in range(cfg.n_res_blocks):
             res_blocks += [
                 ResidualBlock(
@@ -844,7 +851,7 @@ class ConvNet(nn.Module):
         self.last_channel = self.channels[-1]
 
     def _build_conv(self) -> nn.Module:
-        convs = []
+        convs: list[nn.Module] = []
         for i in range(len(self.channels) - 1):
             convs += [ConvNormActivation(self.channels[i], self.channels[i + 1], self.cfg.conv_cfgs[i])]
             if self.cfg.attention is not None:
@@ -1012,7 +1019,7 @@ class ResNetPixShuffle(nn.Module):
 
         # Residual blocks
 
-        res_blocks = []
+        res_blocks: list[nn.Module] = []
         for _ in range(self.n_res_blocks):
             res_blocks += [
                 ResidualBlock(
@@ -1036,7 +1043,7 @@ class ResNetPixShuffle(nn.Module):
         upscale_cfg.scale_factor = self.upscale_factor
 
         # Upsampling layers
-        upsampling = []
+        upsampling: list[nn.Module] = []
         for _ in range(self.n_upsampling):
             upsampling += [
                 ConvNormActivation(self.conv_channel, self.conv_channel, upscale_cfg),
@@ -1219,7 +1226,7 @@ class ConvTranspose(nn.Module):
         return self.conv(z)
 
     def _build_conv(self) -> nn.Module:
-        convs = []
+        convs: list[nn.Module] = []
         for i, cfg in enumerate(self.cfg.conv_cfgs):
             if self.cfg.attention is not None:
                 convs += [Attention2d(self.channels[i], nhead=None, attn_cfg=self.cfg.attention)]

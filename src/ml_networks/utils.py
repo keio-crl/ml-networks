@@ -6,20 +6,20 @@ import random
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import blosc2
+import blosc2  # type: ignore[import-not-found]
 import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-import pytorch_lightning as pl
-import pytorch_optimizer
-import schedulefree
+import pytorch_lightning as pl  # type: ignore[import-untyped]
+import pytorch_optimizer  # type: ignore[import-untyped]
+import schedulefree  # type: ignore[import-untyped]
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
+from torchvision import transforms  # type: ignore[import-untyped]
 
 from ml_networks.config import SoftmaxTransConfig
 

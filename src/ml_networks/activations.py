@@ -182,16 +182,18 @@ class TanhExpBase(torch.autograd.Function):
 
     @staticmethod
     def setup_context(
-        ctx: torch.autograd.function.FunctionCtx,
-        inputs: torch.Tensor,
+        ctx: Any,
+        inputs: tuple[torch.Tensor, ...],
         output: torch.Tensor,  # noqa: ARG004
     ) -> None:
-        ctx.save_for_backward(*inputs)
+        (x,) = inputs
+        ctx.x = x  # type: ignore[assignment]
 
     @staticmethod
-    def backward(ctx: torch.autograd.function.FunctionCtx, grad_output: torch.Tensor) -> torch.Tensor:
-        (x,) = ctx.saved_tensors
-        return grad_output * (x.exp().tanh() - (x * x.exp() * (x.exp().tanh() ** 2 - 1)))
+    def backward(ctx: Any, *grad_outputs: Any) -> torch.Tensor:
+        (grad_output,) = grad_outputs
+        x: torch.Tensor = ctx.x  # type: ignore[assignment]
+        return torch.as_tensor(grad_output) * (x.exp().tanh() - (x * x.exp() * (x.exp().tanh() ** 2 - 1)))
 
 
 if __name__ == "__main__":

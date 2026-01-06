@@ -11,7 +11,10 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
-from torchgeometry.contrib.spatial_soft_argmax2d import create_meshgrid, spatial_soft_argmax2d
+from torchgeometry.contrib.spatial_soft_argmax2d import (  # type: ignore[import-untyped]
+    create_meshgrid,
+    spatial_soft_argmax2d,
+)
 
 from ml_networks.activations import Activation
 from ml_networks.config import (
@@ -180,6 +183,7 @@ class LinearNormActivation(nn.Module):
         cfg.norm_cfg["normalized_shape"] = normalized_shape
         self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation)
+        self.dropout: nn.Module
         if cfg.dropout > 0:
             self.dropout = nn.Dropout(cfg.dropout)
         else:
@@ -443,6 +447,7 @@ class ConvNormActivation(nn.Module):
             "batch2d" if cfg.norm == "batch" else cfg.norm
         )  # type: ignore[assignment]
         self.norm = get_norm(norm_type, **cfg.norm_cfg)
+        self.pixel_shuffle: nn.Module
         if cfg.scale_factor > 0:
             self.pixel_shuffle = nn.PixelShuffle(cfg.scale_factor)
         elif cfg.scale_factor < 0:
@@ -450,7 +455,7 @@ class ConvNormActivation(nn.Module):
         else:
             self.pixel_shuffle = nn.Identity()
         self.activation = Activation(cfg.activation, dim=-3)
-        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
+        self.dropout: nn.Module = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
         self.norm_first = cfg.norm_first
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -573,7 +578,7 @@ class ConvNormActivation1d(nn.Module):
             cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
         if cfg.scale_factor > 0:
-            self.horizontal_shuffle = HorizonShuffle(cfg.scale_factor)
+            self.horizontal_shuffle: nn.Module = HorizonShuffle(cfg.scale_factor)
         elif cfg.scale_factor < 0:
             self.horizontal_shuffle = HorizonUnShuffle(abs(cfg.scale_factor))
         else:
@@ -584,7 +589,7 @@ class ConvNormActivation1d(nn.Module):
         )  # type: ignore[assignment]
         self.norm = get_norm(norm_type, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-2)
-        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
+        self.dropout: nn.Module = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
         self.norm_first = cfg.norm_first
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -797,7 +802,7 @@ class ConvTransposeNormActivation(nn.Module):
         )  # type: ignore[assignment]
         self.norm = get_norm(norm_type, **cfg.norm_cfg)
         self.activation = Activation(cfg.activation, dim=-3)
-        self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
+        self.dropout: nn.Module = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -1064,6 +1069,7 @@ class PositionalEncoding(nn.Module):
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
         self.register_buffer("pe", pe)
+        self.pe: torch.Tensor = pe
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
