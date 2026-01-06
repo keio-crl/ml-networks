@@ -172,8 +172,9 @@ class ConditionalUnet2d(nn.Module):
         global_feature = cond.reshape(-1, cond.shape[-1])
 
         x = base
-        h = []
-        for resnet, attn, resnet2, downsample in self.down_modules:
+        h: list[torch.Tensor] = []
+        for modules in self.down_modules:
+            resnet, attn, resnet2, downsample = tuple(modules)  # type: ignore[misc]
             x = resnet(x, global_feature)
             x = attn(x)
             x = resnet2(x, global_feature)
@@ -183,7 +184,8 @@ class ConditionalUnet2d(nn.Module):
         for mid_module in self.mid_modules:
             x = mid_module(x, global_feature)
 
-        for resnet, attn, resnet2, upsample in self.up_modules:
+        for modules in self.up_modules:
+            resnet, attn, resnet2, upsample = tuple(modules)  # type: ignore[misc]
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = attn(x)
@@ -391,8 +393,9 @@ class ConditionalUnet1d(nn.Module):
         global_feature = cond.reshape(-1, cond.shape[-1])
 
         x = base
-        h = []
-        for resnet, attn, resnet2, downsample in self.down_modules:
+        h: list[torch.Tensor] = []
+        for modules in self.down_modules:
+            resnet, attn, resnet2, downsample = tuple(modules)  # type: ignore[misc]
             x = resnet(x, global_feature)
             x = attn(x)
             x = resnet2(x, global_feature)
@@ -402,7 +405,8 @@ class ConditionalUnet1d(nn.Module):
         for mid_module in self.mid_modules:
             x = mid_module(x) if isinstance(mid_module, nn.Identity) else mid_module(x, global_feature)
 
-        for resnet, attn, resnet2, upsample in self.up_modules:
+        for modules in self.up_modules:
+            resnet, attn, resnet2, upsample = tuple(modules)  # type: ignore[misc]
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = attn(x)
