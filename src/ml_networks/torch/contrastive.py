@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from ml_networks.config import ContrastiveLearningConfig
-from ml_networks.layers import MLPLayer
+from ml_networks.torch.layers import MLPLayer
 
 
 class ContrastiveLearningLoss(pl.LightningModule):

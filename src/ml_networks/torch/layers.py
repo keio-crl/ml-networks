@@ -16,7 +16,6 @@ from torchgeometry.contrib.spatial_soft_argmax2d import (  # type: ignore[import
     spatial_soft_argmax2d,
 )
 
-from ml_networks.activations import Activation
 from ml_networks.config import (
     AttentionConfig,
     ConvConfig,
@@ -25,6 +24,7 @@ from ml_networks.config import (
     SpatialSoftmaxConfig,
     TransformerConfig,
 )
+from ml_networks.torch.activations import Activation
 
 
 def get_norm(

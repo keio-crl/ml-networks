@@ -6,7 +6,7 @@ import torch
 import torch.distributions as D
 import torch.nn.functional as F
 
-from ml_networks.distributions import StochState
+from ml_networks.torch.distributions import StochState
 
 # version adaptation for PyTorch > 1.7.1
 IS_HIGH_VERSION = tuple(map(int, torch.__version__.split("+")[0].split("."))) > (1, 7, 1)

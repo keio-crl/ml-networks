@@ -11,8 +11,8 @@ from einops.layers.torch import Rearrange
 from torch import nn
 
 from ml_networks.config import ConvConfig, MLPConfig, UNetConfig
-from ml_networks.hypernetworks import HyperNet
-from ml_networks.layers import (
+from ml_networks.torch.hypernetworks import HyperNet
+from ml_networks.torch.layers import (
     Attention1d,
     Attention2d,
     ConvNormActivation,
