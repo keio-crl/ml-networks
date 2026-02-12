@@ -9,7 +9,6 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from ml_networks.base import BaseModule
 from ml_networks.config import (
     AdaptiveAveragePoolingConfig,
     ConvConfig,
@@ -20,7 +19,8 @@ from ml_networks.config import (
     SpatialSoftmaxConfig,
     ViTConfig,
 )
-from ml_networks.layers import (
+from ml_networks.torch.base import BaseModule
+from ml_networks.torch.layers import (
     Attention2d,
     ConvNormActivation,
     ConvTransposeNormActivation,

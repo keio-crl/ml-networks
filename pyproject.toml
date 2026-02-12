@@ -1,6 +1,6 @@
 [project]
 name = "ml_networks"
-version = "0.1.0"
+version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -36,6 +36,13 @@ dev = [
     "pytest-cov<=6.0.0",
     "ruff>=0.9.10",
     "types-pyserial>=3.5.0.20241221",
+]
+jax = [
+    "distrax>=0.1.5",
+    "einops>=0.8.1",
+    "flax>=0.12.0",
+    "jax>=0.4.30",
+    "optax>=0.2.0",
 ]
 docs = [
     "mkdocs>=1.6.1",

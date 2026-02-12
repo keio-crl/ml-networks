@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import torch
-import torch.distributions as D
+import torch.distributions as D  # pylint: disable=import-self
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ml_networks.utils import save_blosc2, softmax
+from ml_networks.torch.torch_utils import softmax
+from ml_networks.utils import save_blosc2
 
 
 def get_dist(state: StochState) -> D.Independent:

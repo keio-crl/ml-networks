@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.nn import init
 
 from ml_networks.config import MLPConfig
-from ml_networks.layers import MLPLayer
+from ml_networks.torch.layers import MLPLayer
 
 Shape = tuple[int, ...]
 
