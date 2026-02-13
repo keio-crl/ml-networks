@@ -4,19 +4,50 @@
 
 ## 概要
 
-`ml-networks`は、PyTorchベースの深層学習モデル構築を支援するライブラリです。以下の機能を提供します：
+`ml-networks`は、**PyTorch**および**JAX（Flax NNX）**ベースの深層学習モデル構築を支援するライブラリです。以下の機能を提供します：
 
-- **基本的なニューラルネットワークアーキテクチャ**: MLP、Encoder、Decoder、UNetなど
-- **分布のサポート**: 正規分布、カテゴリカル分布、ベルヌーイ分布
-- **損失関数**: Focal Loss、Charbonnier Loss、Focal Frequency Lossなど
+- **基本的なニューラルネットワークアーキテクチャ**: MLP、Encoder、Decoder、UNet、Vision Transformer（ViT）など
+- **分布のサポート**: 正規分布、カテゴリカル分布、ベルヌーイ分布、BSQコードブック
+- **損失関数**: Focal Loss、Charbonnier Loss、Focal Frequency Loss、KLダイバージェンスなど
 - **便利なユーティリティ**: 活性化関数、最適化手法、データ保存・読み込み機能
+- **高度な機能**: HyperNetwork、対照学習（Contrastive Learning）、条件付きUNet
+
+## パッケージ構成
+
+```
+ml_networks/
+├── config.py          # 共通設定クラス（PyTorch/JAX共通）
+├── utils.py           # 共通ユーティリティ（blosc2 I/O, conv計算など）
+├── callbacks.py       # PyTorch Lightning コールバック
+├── torch/             # PyTorch実装
+│   ├── layers.py      # MLP, Conv, Attention, Transformerなど
+│   ├── vision.py      # Encoder, Decoder, ConvNet, ResNet, ViT
+│   ├── unet.py        # ConditionalUnet1d, ConditionalUnet2d
+│   ├── distributions.py  # 確率分布
+│   ├── loss.py        # 損失関数
+│   ├── activations.py # カスタム活性化関数
+│   ├── hypernetworks.py  # HyperNetwork
+│   ├── contrastive.py # 対照学習
+│   └── torch_utils.py # PyTorch固有ユーティリティ
+└── jax/               # JAX (Flax NNX) 実装
+    ├── layers.py      # MLP, Conv, Attention, Transformerなど
+    ├── vision.py      # Encoder, Decoder, ConvNet, ResNet, ViT
+    ├── unet.py        # ConditionalUnet1d, ConditionalUnet2d
+    ├── distributions.py  # 確率分布
+    ├── loss.py        # 損失関数
+    ├── activations.py # カスタム活性化関数
+    ├── hypernetworks.py  # HyperNetwork
+    ├── contrastive.py # 対照学習
+    └── jax_utils.py   # JAX固有ユーティリティ
+```
 
 ## インストール
 
 ### 要件
 
 - Python >= 3.10
-- PyTorch >= 2.0
+- PyTorch >= 2.0（PyTorchバックエンドを使用する場合）
+- JAX >= 0.4.30 + Flax >= 0.12.0（JAXバックエンドを使用する場合）
 
 ### インストール方法
 
@@ -40,6 +71,12 @@ rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
 uv add https://github.com/keio-crl/ml-networks.git
 ```
 
+#### JAXサポートを追加する場合
+
+```bash
+pip install "ml-networks[jax] @ https://github.com/keio-crl/ml-networks.git"
+```
+
 **注意**: uvを使用する場合は、`<access token>`をGitHubのPersonal Access Tokenに置き換えてください。
 
 ## 使用方法
@@ -51,21 +88,24 @@ uv add https://github.com/keio-crl/ml-networks.git
 1. [MLP](#MLP)
 2. [Encoder](#Encoder)
 3. [Decoder](#Decoder)
-4. [Distributions](#Distributions)
-5. [Data Save and Load](#データの保存読込)
-6. [Loss Functions](#損失関数)
-7. [その他便利なものたち](#その他便利なものたち)
+4. [UNet](#UNet)
+5. [Distributions](#Distributions)
+6. [データの保存読込](#データの保存読込)
+7. [損失関数](#損失関数)
+8. [JAXバックエンド](#JAXバックエンド)
+9. [その他便利なものたち](#その他便利なものたち)
 
 ### MLP
 
 ```python
-from ml_networks import MLPLayer, MLPConfig, LinearConfig
+from ml_networks.torch import MLPLayer
+from ml_networks import MLPConfig, LinearConfig
 
 mlp_config = MLPConfig(
         hidden_dim= 128, # 隠れ層の次元
         n_layers= 2, # 隠れ層の数
         output_activation="Tanh", # 出力層の活性化関数
-        linaer_cfg=LinearConfig(
+        linear_cfg=LinearConfig(
             activation="ReLU", # 活性化関数
             bias=True, # バイアスを使うかどうか Default: True
             norm="none", # 正規化を行うかどうか. Default: "none"
@@ -95,9 +135,11 @@ print(y.shape)
 #### Import
 ```python
 
-from ml_networks import (Encoder, ConvNetConfig,
+from ml_networks.torch import Encoder, SpatialSoftmax
+from ml_networks import (ConvNetConfig, ConvConfig,
                          ViTConfig, ResNetConfig,
-                         MLPConfig, LinearConfig)
+                         MLPConfig, LinearConfig,
+                         SpatialSoftmaxConfig, AdaptiveAveragePoolingConfig)
 
 ```
 #### backboneの設定
@@ -162,7 +204,7 @@ full_connection_cfg = MLPConfig(
     hidden_dim=128,
     n_layers=2,
     output_activation="Tanh",
-    linaer_cfg=LinearConfig(
+    linear_cfg=LinearConfig(
         activation="ReLU",
         bias=True,
     )
@@ -182,7 +224,7 @@ full_connection_cfg = SpatialSoftmaxConfig(
 )
 
 # Adaptive(Global)AveragePoolingを使う場合は以下のように設定する
-full_connection_cfg = AdaptiveAvgPoolConfig()
+full_connection_cfg = AdaptiveAveragePoolingConfig()
 
 # 特徴マップをそのまま出力する場合は以下のように設定する
 full_connection_cfg = None
@@ -207,8 +249,6 @@ print(z.shape)
 
 
 # 独立にspatial softmaxを使う場合
-from ml_networks import SpatialSoftmaxConfig, SpatialSoftmax
-
 data = torch.randn(32, 3, 64, 64)
 cfg = SpatialSoftmaxConfig(
     temperature=1.0, # 温度パラメータ．Default: 1.0
@@ -223,7 +263,8 @@ z = spatial_softmax(data)
 ### Decoder
 #### Import
 ```python
-from ml_networks import Decoder, ConvNetConfig, MLPConfig, LinearConfig, ResNetConfig
+from ml_networks.torch import Decoder
+from ml_networks import ConvNetConfig, ConvConfig, MLPConfig, LinearConfig, ResNetConfig
 
 ```
 #### backboneの設定
@@ -254,15 +295,15 @@ decoder_cfg = ConvNetConfig(
 # ResNet+PixelShuffleのデコーダ
 # エンコーダのPixelUnShuffle -> PixelShuffleとなったバージョン．
 # PixelShuffleはPixelUnShuffleの逆なので，縦横がデカくなる．
-encoder_config = ResNetConfig(
+decoder_cfg = ResNetConfig(
     conv_channel=64, # channel数. 全ての層で同じchannel
     conv_kernel=3, # カーネルサイズ
     f_kernel=3, # 最初 or 最後の層のカーネルサイズ
     conv_activation="ReLU", # 活性化関数
-    output_activation="Tanh", # 出力層の活性化関数
+    out_activation="Tanh", # 出力層の活性化関数
     n_res_blocks=3, # ResBlockの数
-scale_factor=2, # PixelShuffleのスケールファクタ. 1回のPixelUhuffleで何倍にするか
-    n_scaling=3, # PixelUnShuffleの数
+    scale_factor=2, # PixelShuffleのスケールファクタ. 1回のPixelShuffleで何倍にするか
+    n_scaling=3, # PixelShuffleの数
     norm="batch", # 正規化の種類. ConvConfigと同じ．
     norm_cfg={"affine": True}, # 正規化の設定. ConvConfigと同じ．
     dropout=0.0, # ドロップアウト率. ConvConfigと同じ．
@@ -283,7 +324,7 @@ feature_dim = 64
 ## feature_dim = <backboneの入力特徴マップ次元>
 ## 違うのを渡すとエラーが出る．
 
-decoder = decoder(feature_dim, obs_shape, decoder_cfg, full_connection_cfg)
+decoder = Decoder(feature_dim, obs_shape, decoder_cfg, full_connection_cfg)
 
 
 z = torch.randn(32, feature_dim)
@@ -293,12 +334,69 @@ print(predicted_obs.shape)
 
 ```
 
+### UNet
+
+条件付きUNet（Conditional UNet）は、Diffusion Modelなどで広く使われるアーキテクチャです。
+2Dバージョン（画像用）と1Dバージョン（時系列用）の両方に対応しています。
+
+```python
+from ml_networks.torch import ConditionalUnet2d
+from ml_networks import UNetConfig, ConvConfig
+import torch
+
+cfg = UNetConfig(
+    channels=[64, 128, 256],       # 各解像度レベルのチャンネル数
+    conv_cfg=ConvConfig(
+        kernel_size=3,
+        padding=1,
+        stride=1,
+        groups=1,
+        activation="ReLU",
+        dropout=0.0,
+    ),
+    has_attn=True,                 # Attention機構を使用
+    nhead=8,                       # Attentionのヘッド数
+    cond_pred_scale=True,          # 条件付きスケーリング
+)
+
+net = ConditionalUnet2d(
+    feature_dim=32,                # 条件ベクトルの次元
+    obs_shape=(3, 64, 64),         # 画像の形状 (C, H, W)
+    cfg=cfg,
+)
+
+# 入力: ノイズ画像 + 条件ベクトル
+x = torch.randn(2, 3, 64, 64)
+cond = torch.randn(2, 32)
+out = net(x, cond)
+print(out.shape)
+>>> torch.Size([2, 3, 64, 64])
+```
+
+1Dバージョン（時系列用）：
+
+```python
+from ml_networks.torch import ConditionalUnet1d
+
+net = ConditionalUnet1d(
+    feature_dim=32,
+    obs_shape=(8, 128),            # (チャンネル数, シーケンス長)
+    cfg=cfg,
+)
+
+x = torch.randn(2, 8, 128)
+cond = torch.randn(2, 32)
+out = net(x, cond)
+print(out.shape)
+>>> torch.Size([2, 8, 128])
+```
+
 ### Distributions
 stringで分布を指定．
 #### 正規分布
 
 ```python
-from ml_networks import Distribution
+from ml_networks.torch import Distribution
 
 feature_dim = 64
 
@@ -308,7 +406,7 @@ full_connection_cfg = MLPConfig(
     n_layers=2,
     output_activation="Identity", # 出力層の活性化関数は分布に変換する場合何もかけないのがいい．
                                   # Identityを指定すると何もかけない．
-    linaer_cfg=LinearConfig(
+    linear_cfg=LinearConfig(
         activation="ReLU",
         bias=True,
     )
@@ -322,7 +420,7 @@ dist = Distribution(
                               # カテゴリカル分布ならカテゴリ数×各カテゴリの次元
                               # ベルヌーイ分布なら超球の数×超球の次元
         dist = "normal", # 分布の種類. Literal["normal", "categorical", "bernoulli"]
-        n_gropus = 1, # 分布のグループ数．ガウス分布の場合は意味ない. Default: 1
+        n_groups = 1, # 分布のグループ数．ガウス分布の場合は意味ない. Default: 1
                       # カテゴリカル分布の場合はカテゴリ数．ベルヌーイ分布の場合は超球の数
         spherical = False,  # カテゴリカル分布の場合には{0, 1} -> {-1, 1}．Default: False
                             # ベルヌーイ分布の場合に超球にするかどうか．Default: False
@@ -358,7 +456,7 @@ encoder = Encoder(feature_dim, obs_shape, encoder_cfg, full_connection_cfg)
 dist = Distribution(
         in_dim = feature_dim,
         dist = "categorical",
-        n_gropus = 8, # feature_dimがn_gropusの倍数でないとエラーが出る．
+        n_groups = 8, # feature_dimがn_groupsの倍数でないとエラーが出る．
 )
 z = encoder(obs)
 
@@ -387,7 +485,7 @@ for batch in dataloader:
     dist_list.append(dist_z)
 
 # 分布データをstack
-from ml_networks import stack_dist
+from ml_networks.torch import stack_dist
 stacked_dist = stack_dist(
     dist_list,
     dim=0 # どの次元でstackするか．Default: 0
@@ -396,7 +494,7 @@ print(stacked_dist.shape)
 >>> NormalShape(mean: torch.Size([100, 32, 64]), std: torch.Size([100, 32, 64]), stoch: torch.Size([100, 32, 64]))
 
 # 分布データをconcatenate
-from ml_networks import cat_dist
+from ml_networks.torch import cat_dist
 concatenated_dist = cat_dist(
     dist_list,
     dim=-1 # どの次元でconcatenateするか．Default: -1
@@ -408,12 +506,12 @@ print(concatenated_dist.shape)
 
 #### 分布データの保存
 ```python
-from ml_networks import Distribution
+from ml_networks.torch import Distribution
 
 dist = Distribution(
         in_dim = feature_dim,
         dist = "normal",
-        n_gropus = 1,
+        n_groups = 1,
 )
 
 z = encoder(obs)
@@ -450,7 +548,7 @@ loaded_data = load_blosc2("dataset/image.blosc2")
 #### Focal Loss
 分類の学習に良いもの．refer to [Focal Loss](https://qiita.com/agatan/items/53fe8d21f2147b0ac982)
 ```python
-from ml_networks import focal_loss, binary_focal_loss
+from ml_networks.torch import focal_loss, binary_focal_loss
 
 # 多クラス分類の場合
 logits = torch.randn(32, 10)
@@ -479,7 +577,7 @@ loss = binary_focal_loss(
 
 [charbonnier loss](https://arxiv.org/abs/1701.03077)と[focal frequency loss](https://arxiv.org/abs/2012.12821)が使える．
 ```python
-from ml_networks import FocalFrequencyLoss, charbonnier
+from ml_networks.torch import FocalFrequencyLoss, charbonnier
 
 # charbonnier loss
 # 損失の勾配が安定するらしい
@@ -507,6 +605,35 @@ loss_fn = FocalFrequencyLoss(
 loss = loss_fn(predicted_obs, obs)
 ```
 
+### JAXバックエンド
+
+`ml-networks`はPyTorchに加えてJAX（Flax NNX）バックエンドを提供しています。
+同一のConfig体系を使用するため、設定を変更することなくフレームワークを切り替えることができます。
+
+```python
+from ml_networks.jax import MLPLayer, Encoder, Decoder, Distribution
+from ml_networks import MLPConfig, LinearConfig, ConvNetConfig, ConvConfig
+import jax
+import jax.numpy as jnp
+
+# 設定はPyTorchと同じ
+mlp_config = MLPConfig(
+    hidden_dim=128,
+    n_layers=2,
+    output_activation="Tanh",
+    linear_cfg=LinearConfig(activation="ReLU", bias=True)
+)
+
+# JAXでは初期化時にrngsが必要
+rngs = jax.random.PRNGKey(0)
+mlp = MLPLayer(input_dim=16, output_dim=8, mlp_config=mlp_config, rngs=rngs)
+
+x = jnp.ones((32, 16))
+y = mlp(x)
+print(y.shape)  # (32, 8)
+```
+
+JAXバックエンドの詳細は[ドキュメント](https://keio-crl.github.io/ml-networks/guides/jax/)を参照してください。
 
 ### その他便利なものたち
 #### activations
@@ -520,9 +647,12 @@ pytorchに実装されている活性化関数に加えて，以下の活性化�
     - "Correction Regularized ReLU": 正則化されたReLU. See [here](https://openreview.net/forum?id=7TZYM6Hm9p)
 - "TanhExp"
     - Mishの改善版という位置付け. See [here](https://qiita.com/kuroitu/items/73cd401afd463a78115a)
+- "L2Norm"
+    - L2正規化. 特徴量を単位超球上に射影する．
+
 ```python
 
-from ml_networks import Activation
+from ml_networks.torch import Activation
 
 act = Activation("ReLU")
 ```
@@ -533,7 +663,7 @@ pytorchに実装されている最適化手法に加えて，
 [pytorch_optimizer](https://pypi.org/project/pytorch_optimizer/)に実装されている最適化手法が使えます．
 最新のものが多いので便利．
 ```python
-from ml_networks import get_optimizer
+from ml_networks.torch import get_optimizer
 import torch.nn as nn
 
 model = nn.Linear(16, 8)
@@ -546,7 +676,8 @@ optimizer = get_optimizer(model.parameters(), "Adam", lr=1e-3, weight_decay=1e-4
 #### seed固定
 seedを固定する．
 ```python
-from ml_networks import torch_fix_seed, determine_loader
+from ml_networks.torch import torch_fix_seed
+from ml_networks import determine_loader
 
 # random, np, torchのseedを固定する．
 # さらにGPU関連の再現性も（ある程度）担保．
