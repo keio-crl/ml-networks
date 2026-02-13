@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -57,60 +56,86 @@ class ConditionalUnet2d(nnx.Module):
         mid_dim = all_dims[-1]
         self.mid_modules = nnx.List([
             ConditionalResidualBlock2d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                cond_predict_scale=cfg.cond_pred_scale,
+                rngs=rngs,
             ),
             Attention2d(mid_dim, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
             ConditionalResidualBlock2d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                cond_predict_scale=cfg.cond_pred_scale,
+                rngs=rngs,
             ),
         ])
 
         down_modules = []
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (len(in_out) - 1)
-            down_modules.append(nnx.List([
-                ConditionalResidualBlock2d(
-                    dim_in, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                ),
-                Attention2d(dim_out, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
-                ConditionalResidualBlock2d(
-                    dim_out, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                ),
-                Downsample2d(dim_out, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
-            ]))
+            down_modules.append(
+                nnx.List([
+                    ConditionalResidualBlock2d(
+                        dim_in,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    ),
+                    Attention2d(dim_out, cfg.nhead, rngs=rngs)
+                    if cfg.has_attn and cfg.nhead is not None
+                    else Identity(),
+                    ConditionalResidualBlock2d(
+                        dim_out,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    ),
+                    Downsample2d(dim_out, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
+                ])
+            )
         self.down_modules = nnx.List(down_modules)
 
         up_modules = []
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
             is_last = ind >= (len(in_out) - 1)
-            up_modules.append(nnx.List([
-                ConditionalResidualBlock2d(
-                    dim_out * 2, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                ),
-                Attention2d(dim_in, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
-                ConditionalResidualBlock2d(
-                    dim_in, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                ),
-                Upsample2d(dim_in, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
-            ]))
+            up_modules.append(
+                nnx.List([
+                    ConditionalResidualBlock2d(
+                        dim_out * 2,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    ),
+                    Attention2d(dim_in, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
+                    ConditionalResidualBlock2d(
+                        dim_in,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    ),
+                    Upsample2d(dim_in, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
+                ])
+            )
         self.up_modules = nnx.List(up_modules)
 
         self.final_conv1 = ConvNormActivation(start_dim, start_dim, cfg.conv_cfg, rngs=rngs)
         self.final_conv2 = nnx.Conv(
-            in_features=start_dim, out_features=in_channels,
-            kernel_size=(1, 1), rngs=rngs,
+            in_features=start_dim,
+            out_features=in_channels,
+            kernel_size=(1, 1),
+            rngs=rngs,
         )
 
     def __call__(self, base: jax.Array, cond: jax.Array) -> jax.Array:
@@ -146,10 +171,7 @@ class ConditionalUnet2d(nnx.Module):
             x = downsample(x)
 
         for mid_module in self.mid_modules:
-            if isinstance(mid_module, Identity):
-                x = mid_module(x)
-            else:
-                x = mid_module(x, global_feature)
+            x = mid_module(x) if isinstance(mid_module, Identity) else mid_module(x, global_feature)
 
         for modules in self.up_modules:
             resnet, attn, resnet2, upsample = modules[0], modules[1], modules[2], modules[3]
@@ -198,96 +220,140 @@ class ConditionalUnet1d(nnx.Module):
         mid_dim = all_dims[-1]
         self.mid_modules = nnx.List([
             ConditionalResidualBlock1d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                cond_predict_scale=cfg.cond_pred_scale,
+                rngs=rngs,
             )
             if not cfg.use_hypernet
             else HyperConditionalResidualBlock1d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                rngs=rngs,
             ),
             Attention1d(mid_dim, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
             ConditionalResidualBlock1d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                cond_predict_scale=cfg.cond_pred_scale,
+                rngs=rngs,
             )
             if not cfg.use_hypernet
             else HyperConditionalResidualBlock1d(
-                mid_dim, mid_dim,
-                cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
+                mid_dim,
+                mid_dim,
+                cond_dim=feature_dim,
+                conv_cfg=cfg.conv_cfg,
+                hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                rngs=rngs,
             ),
         ])
 
         down_modules = []
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (len(in_out) - 1)
-            down_modules.append(nnx.List([
-                ConditionalResidualBlock1d(
-                    dim_in, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                )
-                if not cfg.use_hypernet
-                else HyperConditionalResidualBlock1d(
-                    dim_in, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
-                ),
-                Attention1d(dim_out, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
-                ConditionalResidualBlock1d(
-                    dim_out, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                )
-                if not cfg.use_hypernet
-                else HyperConditionalResidualBlock1d(
-                    dim_out, dim_out,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
-                ),
-                Downsample1d(dim_out, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
-            ]))
+            down_modules.append(
+                nnx.List([
+                    ConditionalResidualBlock1d(
+                        dim_in,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    )
+                    if not cfg.use_hypernet
+                    else HyperConditionalResidualBlock1d(
+                        dim_in,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                        rngs=rngs,
+                    ),
+                    Attention1d(dim_out, cfg.nhead, rngs=rngs)
+                    if cfg.has_attn and cfg.nhead is not None
+                    else Identity(),
+                    ConditionalResidualBlock1d(
+                        dim_out,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    )
+                    if not cfg.use_hypernet
+                    else HyperConditionalResidualBlock1d(
+                        dim_out,
+                        dim_out,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                        rngs=rngs,
+                    ),
+                    Downsample1d(dim_out, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
+                ])
+            )
         self.down_modules = nnx.List(down_modules)
 
         up_modules = []
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
             is_last = ind >= (len(in_out) - 1)
-            up_modules.append(nnx.List([
-                ConditionalResidualBlock1d(
-                    dim_out * 2, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                )
-                if not cfg.use_hypernet
-                else HyperConditionalResidualBlock1d(
-                    dim_out * 2, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
-                ),
-                Attention1d(dim_in, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
-                ConditionalResidualBlock1d(
-                    dim_in, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    cond_predict_scale=cfg.cond_pred_scale, rngs=rngs,
-                )
-                if not cfg.use_hypernet
-                else HyperConditionalResidualBlock1d(
-                    dim_in, dim_in,
-                    cond_dim=feature_dim, conv_cfg=cfg.conv_cfg,
-                    hyper_mlp_cfg=cfg.hyper_mlp_cfg, rngs=rngs,
-                ),
-                Upsample1d(dim_in, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
-            ]))
+            up_modules.append(
+                nnx.List([
+                    ConditionalResidualBlock1d(
+                        dim_out * 2,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    )
+                    if not cfg.use_hypernet
+                    else HyperConditionalResidualBlock1d(
+                        dim_out * 2,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                        rngs=rngs,
+                    ),
+                    Attention1d(dim_in, cfg.nhead, rngs=rngs) if cfg.has_attn and cfg.nhead is not None else Identity(),
+                    ConditionalResidualBlock1d(
+                        dim_in,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        cond_predict_scale=cfg.cond_pred_scale,
+                        rngs=rngs,
+                    )
+                    if not cfg.use_hypernet
+                    else HyperConditionalResidualBlock1d(
+                        dim_in,
+                        dim_in,
+                        cond_dim=feature_dim,
+                        conv_cfg=cfg.conv_cfg,
+                        hyper_mlp_cfg=cfg.hyper_mlp_cfg,
+                        rngs=rngs,
+                    ),
+                    Upsample1d(dim_in, cfg.use_shuffle, rngs=rngs) if not is_last else Identity(),
+                ])
+            )
         self.up_modules = nnx.List(up_modules)
 
         self.final_conv1 = ConvNormActivation1d(start_dim, start_dim, cfg.conv_cfg, rngs=rngs)
         self.final_conv2 = nnx.Conv(
-            in_features=start_dim, out_features=in_channels,
-            kernel_size=(1,), rngs=rngs,
+            in_features=start_dim,
+            out_features=in_channels,
+            kernel_size=(1,),
+            rngs=rngs,
         )
 
     def __call__(self, base: jax.Array, cond: jax.Array) -> jax.Array:
@@ -323,10 +389,7 @@ class ConditionalUnet1d(nnx.Module):
             x = downsample(x)
 
         for mid_module in self.mid_modules:
-            if isinstance(mid_module, Identity):
-                x = mid_module(x)
-            else:
-                x = mid_module(x, global_feature)
+            x = mid_module(x) if isinstance(mid_module, Identity) else mid_module(x, global_feature)
 
         for modules in self.up_modules:
             resnet, attn, resnet2, upsample = modules[0], modules[1], modules[2], modules[3]
@@ -385,8 +448,10 @@ class ConditionalResidualBlock2d(nnx.Module):
         # Residual projection
         if in_channels != out_channels:
             self.residual_conv = nnx.Conv(
-                in_features=in_channels, out_features=out_channels,
-                kernel_size=(1, 1), rngs=rngs,
+                in_features=in_channels,
+                out_features=out_channels,
+                kernel_size=(1, 1),
+                rngs=rngs,
             )
             self._has_residual_conv = True
         else:
@@ -466,8 +531,10 @@ class ConditionalResidualBlock1d(nnx.Module):
         # Residual projection
         if in_channels != out_channels:
             self.residual_conv = nnx.Conv(
-                in_features=in_channels, out_features=out_channels,
-                kernel_size=(1,), rngs=rngs,
+                in_features=in_channels,
+                out_features=out_channels,
+                kernel_size=(1,),
+                rngs=rngs,
             )
             self._has_residual_conv = True
         else:
@@ -538,17 +605,19 @@ class HyperConditionalResidualBlock2d(nnx.Module):
 
         # Collect parameter shapes for the hypernet
         _, state = nnx.split(self.first_conv)
-        first_shapes = {f"first.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, 'value')}
+        first_shapes = {f"first.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, "value")}
         _, state = nnx.split(self.last_conv)
-        last_shapes = {f"last.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, 'value')}
+        last_shapes = {f"last.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, "value")}
         output_shapes = {**first_shapes, **last_shapes}
 
         self.cond_encoder = HyperNet(cond_dim, output_shapes, hyper_mlp_cfg, rngs=rngs)
 
         if in_channels != out_channels:
             self.residual_conv = nnx.Conv(
-                in_features=in_channels, out_features=out_channels,
-                kernel_size=(1, 1), rngs=rngs,
+                in_features=in_channels,
+                out_features=out_channels,
+                kernel_size=(1, 1),
+                rngs=rngs,
             )
             self._has_residual_conv = True
         else:
@@ -611,17 +680,19 @@ class HyperConditionalResidualBlock1d(nnx.Module):
 
         # Collect parameter shapes for the hypernet
         _, state = nnx.split(self.first_conv)
-        first_shapes = {f"first.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, 'value')}
+        first_shapes = {f"first.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, "value")}
         _, state = nnx.split(self.last_conv)
-        last_shapes = {f"last.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, 'value')}
+        last_shapes = {f"last.{k}": v.value.shape for k, v in state.flat_state().items() if hasattr(v, "value")}
         output_shapes = {**first_shapes, **last_shapes}
 
         self.cond_encoder = HyperNet(cond_dim, output_shapes, hyper_mlp_cfg, rngs=rngs)
 
         if in_channels != out_channels:
             self.residual_conv = nnx.Conv(
-                in_features=in_channels, out_features=out_channels,
-                kernel_size=(1,), rngs=rngs,
+                in_features=in_channels,
+                out_features=out_channels,
+                kernel_size=(1,),
+                rngs=rngs,
             )
             self._has_residual_conv = True
         else:
@@ -666,13 +737,20 @@ class Downsample2d(nnx.Module):
         if use_shuffle:
             # PixelUnshuffle(2) -> Conv to reduce channels
             self.conv = nnx.Conv(
-                in_features=dim * 4, out_features=dim,
-                kernel_size=(3, 3), padding=((1, 1), (1, 1)), rngs=rngs,
+                in_features=dim * 4,
+                out_features=dim,
+                kernel_size=(3, 3),
+                padding=((1, 1), (1, 1)),
+                rngs=rngs,
             )
         else:
             self.conv = nnx.Conv(
-                in_features=dim, out_features=dim,
-                kernel_size=(3, 3), strides=(2, 2), padding=((1, 1), (1, 1)), rngs=rngs,
+                in_features=dim,
+                out_features=dim,
+                kernel_size=(3, 3),
+                strides=(2, 2),
+                padding=((1, 1), (1, 1)),
+                rngs=rngs,
             )
 
     def __call__(self, x: jax.Array) -> jax.Array:
@@ -699,13 +777,20 @@ class Downsample1d(nnx.Module):
         if use_shuffle:
             self.unshuffle = HorizonUnShuffle(2)
             self.conv = nnx.Conv(
-                in_features=dim * 2, out_features=dim,
-                kernel_size=(3,), padding=((1, 1),), rngs=rngs,
+                in_features=dim * 2,
+                out_features=dim,
+                kernel_size=(3,),
+                padding=((1, 1),),
+                rngs=rngs,
             )
         else:
             self.conv = nnx.Conv(
-                in_features=dim, out_features=dim,
-                kernel_size=(3,), strides=(2,), padding=((1, 1),), rngs=rngs,
+                in_features=dim,
+                out_features=dim,
+                kernel_size=(3,),
+                strides=(2,),
+                padding=((1, 1),),
+                rngs=rngs,
             )
 
     def __call__(self, x: jax.Array) -> jax.Array:
@@ -731,14 +816,20 @@ class Upsample2d(nnx.Module):
         self.use_shuffle = use_shuffle
         if use_shuffle:
             self.conv = nnx.Conv(
-                in_features=dim, out_features=dim * 4,
-                kernel_size=(3, 3), padding=((1, 1), (1, 1)), rngs=rngs,
+                in_features=dim,
+                out_features=dim * 4,
+                kernel_size=(3, 3),
+                padding=((1, 1), (1, 1)),
+                rngs=rngs,
             )
         else:
             self.conv = nnx.ConvTranspose(
-                in_features=dim, out_features=dim,
-                kernel_size=(4, 4), strides=(2, 2),
-                padding=((1, 1), (1, 1)), rngs=rngs,
+                in_features=dim,
+                out_features=dim,
+                kernel_size=(4, 4),
+                strides=(2, 2),
+                padding=((1, 1), (1, 1)),
+                rngs=rngs,
             )
 
     def __call__(self, x: jax.Array) -> jax.Array:
@@ -765,15 +856,21 @@ class Upsample1d(nnx.Module):
         self.use_shuffle = use_shuffle
         if use_shuffle:
             self.conv = nnx.Conv(
-                in_features=dim, out_features=dim * 2,
-                kernel_size=(3,), padding=((1, 1),), rngs=rngs,
+                in_features=dim,
+                out_features=dim * 2,
+                kernel_size=(3,),
+                padding=((1, 1),),
+                rngs=rngs,
             )
             self.shuffle = HorizonShuffle(2)
         else:
             self.conv = nnx.ConvTranspose(
-                in_features=dim, out_features=dim,
-                kernel_size=(4,), strides=(2,),
-                padding=((1, 1),), rngs=rngs,
+                in_features=dim,
+                out_features=dim,
+                kernel_size=(4,),
+                strides=(2,),
+                padding=((1, 1),),
+                rngs=rngs,
             )
 
     def __call__(self, x: jax.Array) -> jax.Array:

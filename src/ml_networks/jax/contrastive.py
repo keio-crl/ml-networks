@@ -96,7 +96,11 @@ class ContrastiveLearningLoss(nnx.Module):
 
         if positive_range_self > 0:
             self_positive_1, self_positive_2 = self._calculate_self_positive_pairs(
-                emb_1, emb_2, batch, length, positive_range_self,
+                emb_1,
+                emb_2,
+                batch,
+                length,
+                positive_range_self,
             )
             positive = positive + self_positive_1.reshape(-1) + self_positive_2.reshape(-1)
             loss_dict["self_positive_1"] = jax.lax.stop_gradient(self_positive_1).mean()
@@ -104,7 +108,11 @@ class ContrastiveLearningLoss(nnx.Module):
 
         if positive_range_tgt > 0:
             tgt_positive = self._calculate_target_positive_pairs(
-                emb_1, emb_2, batch, length, positive_range_tgt,
+                emb_1,
+                emb_2,
+                batch,
+                length,
+                positive_range_tgt,
             )
             positive = positive + tgt_positive.reshape(-1)
             loss_dict["tgt_positive"] = jax.lax.stop_gradient(tgt_positive).mean()
@@ -131,20 +139,25 @@ class ContrastiveLearningLoss(nnx.Module):
         length: int,
         positive_range: int,
     ) -> tuple[jax.Array, jax.Array]:
-        """Calculate self-positive pairs for time series data."""
+        """
+        Calculate self-positive pairs for time series data.
+
+        Returns
+        -------
+        tuple[jax.Array, jax.Array]
+            Self-positive similarity scores for both embeddings.
+        """
         self_positive_1_list = []
         self_positive_2_list = []
         for i in range(batch):
             sim1 = emb_1[i] @ emb_1[i].T
             sim2 = emb_2[i] @ emb_2[i].T
             self_pos_1 = jnp.stack([
-                sim1[j, max(0, j - positive_range) : j + positive_range + 1].mean()
-                for j in range(length)
+                sim1[j, max(0, j - positive_range) : j + positive_range + 1].mean() for j in range(length)
             ])
             self_positive_1_list.append(self_pos_1)
             self_pos_2 = jnp.stack([
-                sim2[j, max(0, j - positive_range) : j + positive_range + 1].mean()
-                for j in range(length)
+                sim2[j, max(0, j - positive_range) : j + positive_range + 1].mean() for j in range(length)
             ])
             self_positive_2_list.append(self_pos_2)
         return jnp.stack(self_positive_1_list), jnp.stack(self_positive_2_list)
@@ -157,13 +170,19 @@ class ContrastiveLearningLoss(nnx.Module):
         length: int,
         positive_range: int,
     ) -> jax.Array:
-        """Calculate target-positive pairs for time series data."""
+        """
+        Calculate target-positive pairs for time series data.
+
+        Returns
+        -------
+        jax.Array
+            Target-positive similarity scores.
+        """
         tgt_positive_list = []
         for i in range(batch):
             sim = emb_1[i] @ emb_2[i].T
             tgt_pos = jnp.stack([
-                sim[j, max(0, j - positive_range) : j + positive_range + 1].mean()
-                for j in range(length)
+                sim[j, max(0, j - positive_range) : j + positive_range + 1].mean() for j in range(length)
             ])
             tgt_positive_list.append(tgt_pos)
         return jnp.stack(tgt_positive_list)

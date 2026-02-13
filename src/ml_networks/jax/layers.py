@@ -174,8 +174,7 @@ def _pad_input(
 
     # Build pad_width: (batch, spatial..., channels) for channels-last
     pad_width = [(0, 0)]  # batch
-    for _ in range(n_spatial_dims):
-        pad_width.append((padding, padding))
+    pad_width.extend((padding, padding) for _ in range(n_spatial_dims))
     pad_width.append((0, 0))  # channels
 
     return jnp.pad(x, pad_width, mode=jnp_mode)
@@ -270,10 +269,7 @@ class LinearNormActivation(nnx.Module):
 
         self.linear = nnx.Linear(input_dim, out_features, use_bias=cfg.bias, rngs=rngs)
 
-        if cfg.norm_first:
-            normalized_shape = input_dim
-        else:
-            normalized_shape = out_features
+        normalized_shape = input_dim if cfg.norm_first else out_features
 
         norm_cfg = dict(cfg.norm_cfg)
         norm_cfg["normalized_shape"] = normalized_shape
@@ -387,8 +383,10 @@ class MLPLayer(nnx.Module):
         """Build dense layers."""
         layers = []
         layers.append(LinearNormActivation(self.input_dim, self.hidden_dim, self.cfg.linear_cfg, rngs=rngs))
-        for _ in range(self.n_layers - 1):
-            layers.append(LinearNormActivation(self.hidden_dim, self.hidden_dim, self.cfg.linear_cfg, rngs=rngs))
+        layers.extend(
+            LinearNormActivation(self.hidden_dim, self.hidden_dim, self.cfg.linear_cfg, rngs=rngs)
+            for _ in range(self.n_layers - 1)
+        )
         last_cfg = deepcopy(self.cfg.linear_cfg)
         last_cfg.activation = self.cfg.output_activation
         layers.append(LinearNormActivation(self.hidden_dim, self.output_dim, last_cfg, rngs=rngs))
@@ -521,7 +519,7 @@ class ConvNormActivation(nnx.Module):
     def _apply_shuffle(self, x: jax.Array) -> jax.Array:
         if self.scale_factor > 0:
             return pixel_shuffle_2d(x, self.scale_factor)
-        elif self.scale_factor < 0:
+        if self.scale_factor < 0:
             return pixel_unshuffle_2d(x, abs(self.scale_factor))
         return x
 
@@ -586,10 +584,7 @@ class ConvNormActivation1d(nnx.Module):
         self.padding_mode = cfg.padding_mode
         self.manual_padding = cfg.padding if cfg.padding_mode != "zeros" else 0
         conv_padding: Any
-        if cfg.padding_mode != "zeros":
-            conv_padding = "VALID"
-        else:
-            conv_padding = ((cfg.padding, cfg.padding),)
+        conv_padding = "VALID" if cfg.padding_mode != "zeros" else ((cfg.padding, cfg.padding),)
 
         self.conv = nnx.Conv(
             in_features=in_channels,
@@ -654,7 +649,7 @@ class ConvNormActivation1d(nnx.Module):
         if self.scale_factor > 0:
             # NLC format: (B, L, C) -> (B, L*factor, C//factor)
             return rearrange(x, "b l (c u) -> b (l u) c", u=self.scale_factor)
-        elif self.scale_factor < 0:
+        if self.scale_factor < 0:
             factor = abs(self.scale_factor)
             # NLC format: (B, L, C) -> (B, L//factor, C*factor)
             return rearrange(x, "b (l u) c -> b l (c u)", u=factor)
@@ -1016,18 +1011,17 @@ class TransformerLayer(nnx.Module):
         self.out_activation = Activation(cfg.output_activation)
 
         # Transformer encoder layers
-        layers = []
-        for _ in range(cfg.n_layers):
-            layers.append(
-                _TransformerEncoderLayer(
-                    d_model=cfg.d_model,
-                    nhead=cfg.nhead,
-                    dim_feedforward=cfg.dim_ff,
-                    dropout=cfg.dropout,
-                    activation=cfg.hidden_activation,
-                    rngs=rngs,
-                )
+        layers = [
+            _TransformerEncoderLayer(
+                d_model=cfg.d_model,
+                nhead=cfg.nhead,
+                dim_feedforward=cfg.dim_ff,
+                dropout=cfg.dropout,
+                activation=cfg.hidden_activation,
+                rngs=rngs,
             )
+            for _ in range(cfg.n_layers)
+        ]
         self.encoder_layers = nnx.List(layers)
 
     def __call__(self, x: jax.Array) -> jax.Array:
@@ -1054,8 +1048,7 @@ class TransformerLayer(nnx.Module):
 
         if self._has_out_proj:
             x = self.out_linear(x)
-        x = self.out_activation(x)
-        return x
+        return self.out_activation(x)
 
 
 class _TransformerEncoderLayer(nnx.Module):
@@ -1100,9 +1093,7 @@ class _TransformerEncoderLayer(nnx.Module):
         x = self.activation(x)
         x = self.linear2(x)
         x = self.dropout2(x)
-        x = residual + x
-
-        return x
+        return residual + x
 
 
 class PositionalEncoding(nnx.Module):
@@ -1496,10 +1487,9 @@ class SpatialSoftmax(nnx.Module):
         x = x / self.temperature
         if self._mode == "argmax":
             return self._spatial_argmax2d(x)
-        elif self._mode == "straight_through":
+        if self._mode == "straight_through":
             return self._spatial_softmax_straight_through(x)
-        else:
-            return self._spatial_soft_argmax2d(x)
+        return self._spatial_soft_argmax2d(x)
 
     def _spatial_soft_argmax2d(self, x: jax.Array) -> jax.Array:
         """Standard spatial soft-argmax (differentiable)."""
@@ -1642,8 +1632,8 @@ class HorizonUnShuffle(nnx.Module):
         jax.Array
             Output tensor (B, L, C * downscale_factor)
         """
-        _b, l, _c = x.shape
-        assert l % self.downscale_factor == 0, "Length dimension must be divisible by downscale_factor."
+        _b, length, _c = x.shape
+        assert length % self.downscale_factor == 0, "Length dimension must be divisible by downscale_factor."
         return rearrange(x, "b (l u) c -> b l (c u)", u=self.downscale_factor)
 
 

@@ -16,7 +16,7 @@ class Activation(nnx.Module):
         if "glu" not in activation.lower():
             kwargs.pop("dim", None)
 
-        _BUILTIN_ACTIVATIONS: dict[str, Any] = {
+        builtin_activations: dict[str, Any] = {
             "ReLU": jax.nn.relu,
             "GELU": jax.nn.gelu,
             "GeLU": jax.nn.gelu,
@@ -30,8 +30,8 @@ class Activation(nnx.Module):
             "Identity": lambda x: x,
         }
 
-        if activation in _BUILTIN_ACTIVATIONS:
-            self._fn = _BUILTIN_ACTIVATIONS[activation]
+        if activation in builtin_activations:
+            self._fn = builtin_activations[activation]
             self._module: nnx.Module | None = None
         elif activation == "TanhExp":
             self._fn = None
@@ -98,17 +98,17 @@ class REReLU(nnx.Module):
     """
 
     def __init__(self, reparametarize_fn: str = "gelu") -> None:
-        _REPARAM_FNS: dict[str, Any] = {
+        reparam_fns: dict[str, Any] = {
             "gelu": jax.nn.gelu,
             "relu": jax.nn.relu,
             "silu": jax.nn.silu,
             "elu": jax.nn.elu,
         }
         reparametarize_fn = reparametarize_fn.lower()
-        if reparametarize_fn not in _REPARAM_FNS:
+        if reparametarize_fn not in reparam_fns:
             msg = f"Reparametarization function '{reparametarize_fn}' is not supported."
             raise ValueError(msg)
-        self.reparametarize_fn = _REPARAM_FNS[reparametarize_fn]
+        self.reparametarize_fn = reparam_fns[reparametarize_fn]
 
     def __call__(self, x: jax.Array) -> jax.Array:
         return (
