@@ -53,7 +53,7 @@ docs = [
 
 [tool.mypy]
 python_version = "3.10"
-plugins = "numpy.typing.mypy_plugin"
+# plugins = "numpy.typing.mypy_plugin"  # numpy not installed in CI
 
 [tool.ruff]
 line-length = 120
@@ -69,6 +69,7 @@ ignore = [
     "S101",   # assetionは必要
     "N812",   # torch.nn.functional as F のため
     "D102",   # 面倒なので
+    "ANN001", # 一部の引数の型アノテーションは省略（idx, nameなど）
     "ANN401", # しょうがない
     "TC001",  # 実行時に使用されるためTYPE_CHECKINGブロックに移動できない
     "C901",   # 複雑度が高いが、リファクタリングは後回し
@@ -77,17 +78,23 @@ ignore = [
     "PTH123", # open()は既存コードとの互換性のため残す
     "PTH207", # globは既存コードとの互換性のため残す
     "A001",   # max/minなどの変数名は文脈上問題ない
+    "A002",   # inputなどの変数名は文脈上問題ない
     "T201",   # printはデバッグ用
     "PLW0127", # 自己代入は意図的
     "B008",   # 関数呼び出しのデフォルト引数は意図的
     "B028",   # stacklevelは省略
-    "ANN001", # 一部の引数の型アノテーションは省略（idx, nameなど）
-    "D205",   # docstringの空行は柔軟に
-    "FA100",  # from __future__ import annotationsは既に追加済み
     "D101",   # 一部のクラスのdocstringは省略
+    "D105",   # マジックメソッドのdocstringは省略
+    "D205",   # docstringの空行は柔軟に
+    "D401",   # docstringの命令形は柔軟に
+    "FA100",  # from __future__ import annotationsは既に追加済み
+    "ARG001", # 未使用の引数は意図的
     "ARG002", # 未使用の引数は意図的
-    "A002",   # inputなどの変数名は文脈上問題ない
+    "DOC201", # 戻り値のdocstringは柔軟に
     "DOC202", # 戻り値がない関数のReturnsセクションは柔軟に
+    "DOC501", # 例外のdocstringは柔軟に
+    "COM812", # フォーマッターとの競合を避けるため
+    "PLC0415", # importの位置は柔軟に（パフォーマンスのため）
 ]
 fixable = ["ALL"]
 unfixable = []

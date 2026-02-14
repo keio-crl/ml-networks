@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import distrax
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax import nnx
 
 from ml_networks.jax.jax_utils import softmax
@@ -95,12 +96,10 @@ class NormalStoch:
         ndim = self.mean.ndim
         if end_dim < 0:
             end_dim = ndim + end_dim
-        new_shape = self.mean.shape[:start_dim] + (-1,) + self.mean.shape[end_dim + 1 :]
+        new_shape = (*self.mean.shape[:start_dim], -1, *self.mean.shape[end_dim + 1 :])
         return self.reshape(*new_shape)
 
     def save(self, path: str) -> None:
-        import numpy as np
-
         os.makedirs(path, exist_ok=True)
         save_blosc2(f"{path}/mean.blosc2", np.asarray(self.mean))
         save_blosc2(f"{path}/std.blosc2", np.asarray(self.std))
@@ -165,8 +164,6 @@ class CategoricalStoch:
         return CategoricalShape(self.logits.shape, self.probs.shape, self.stoch.shape)
 
     def save(self, path: str) -> None:
-        import numpy as np
-
         os.makedirs(path, exist_ok=True)
         save_blosc2(f"{path}/logits.blosc2", np.asarray(self.logits))
         save_blosc2(f"{path}/probs.blosc2", np.asarray(self.probs))
@@ -234,8 +231,6 @@ class BernoulliStoch:
         )
 
     def save(self, path: str) -> None:
-        import numpy as np
-
         os.makedirs(path, exist_ok=True)
         save_blosc2(f"{path}/logits.blosc2", np.asarray(self.logits))
         save_blosc2(f"{path}/probs.blosc2", np.asarray(self.probs))
@@ -510,9 +505,9 @@ class Distribution(nnx.Module):
         """
         if self.dist_type == "normal":
             return self.normal(x, deterministic=deterministic, inv_tmp=inv_tmp)
-        elif self.dist_type == "categorical":
+        if self.dist_type == "categorical":
             return self.categorical(x, deterministic=deterministic, inv_tmp=inv_tmp)
-        elif self.dist_type == "bernoulli":
+        if self.dist_type == "bernoulli":
             return self.bernoulli(x, deterministic=deterministic, inv_tmp=inv_tmp)
         raise NotImplementedError
 

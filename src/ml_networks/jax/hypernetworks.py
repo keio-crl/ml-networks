@@ -114,7 +114,10 @@ class HyperNetMixin:
             shape_tuple = (batch_dim, *shape)
             offsets = self.output_offsets()[name]
             outputs[name] = jax.lax.dynamic_slice_in_dim(
-                flat_output, offsets[0], offsets[1], axis=1
+                flat_output,
+                offsets[0],
+                offsets[1],
+                axis=1,
             ).reshape(shape_tuple)
         return outputs
 
@@ -279,23 +282,22 @@ def initialize_weight(
 
     if distribution == "zeros":
         return jnp.zeros(shape)
-    elif distribution == "kaiming_normal":
+    if distribution == "kaiming_normal":
         return jax.nn.initializers.kaiming_normal()(key, shape)
-    elif distribution == "kaiming_uniform":
+    if distribution == "kaiming_uniform":
         return jax.nn.initializers.he_uniform()(key, shape)
-    elif distribution == "kaiming_normal_fanout":
+    if distribution == "kaiming_normal_fanout":
         return jax.nn.initializers.kaiming_normal()(key, shape)
-    elif distribution == "kaiming_uniform_fanout":
+    if distribution == "kaiming_uniform_fanout":
         return jax.nn.initializers.he_uniform()(key, shape)
-    elif distribution == "glorot_normal":
+    if distribution == "glorot_normal":
         return jax.nn.initializers.glorot_normal()(key, shape)
-    elif distribution == "glorot_uniform":
+    if distribution == "glorot_uniform":
         return jax.nn.initializers.glorot_uniform()(key, shape)
-    elif distribution == "orthogonal":
+    if distribution == "orthogonal":
         return jax.nn.initializers.orthogonal()(key, shape)
-    else:
-        msg = f"Unsupported weight distribution '{distribution}'"
-        raise ValueError(msg)
+    msg = f"Unsupported weight distribution '{distribution}'"
+    raise ValueError(msg)
 
 
 def initialize_bias(

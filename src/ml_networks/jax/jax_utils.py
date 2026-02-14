@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -12,9 +12,6 @@ import optax
 from einops import rearrange
 
 from ml_networks.config import SoftmaxTransConfig
-
-if TYPE_CHECKING:
-    pass
 
 
 class MinMaxNormalize:

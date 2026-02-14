@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Literal
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from flax import nnx
 
 from ml_networks.config import (
@@ -18,7 +16,6 @@ from ml_networks.config import (
     ResNetConfig,
     ViTConfig,
 )
-from ml_networks.jax.activations import Activation
 from ml_networks.jax.layers import (
     Attention2d,
     ConvNormActivation,
@@ -27,8 +24,6 @@ from ml_networks.jax.layers import (
     PatchEmbed,
     ResidualBlock,
     SpatialSoftmax,
-    pixel_shuffle_2d,
-    pixel_unshuffle_2d,
 )
 from ml_networks.utils import conv_out_shape
 
@@ -61,8 +56,8 @@ class Encoder(nnx.Module):
         layers: list[nnx.Module] = []
         spatial_shape: tuple[int, int] = (obs_shape[0], obs_shape[1])
 
-        for i, (n_channels, kernel_size, stride) in enumerate(
-            zip(cfg.channels, cfg.kernel_sizes, cfg.strides, strict=False)
+        for _i, (n_channels, kernel_size, stride) in enumerate(
+            zip(cfg.channels, cfg.kernel_sizes, cfg.strides, strict=False),
         ):
             layers.append(
                 ConvNormActivation(
@@ -81,7 +76,7 @@ class Encoder(nnx.Module):
                         norm_cfg=cfg.norm_cfg,
                     ),
                     rngs=rngs,
-                )
+                ),
             )
             spatial_shape = conv_out_shape(
                 spatial_shape,
@@ -173,7 +168,7 @@ class Decoder(nnx.Module):
                     channels[i + 1],
                     conv_cfg,
                     rngs=rngs,
-                )
+                ),
             )
 
         # Final layer with Identity activation
@@ -195,7 +190,7 @@ class Decoder(nnx.Module):
                 out_channels,
                 final_cfg,
                 rngs=rngs,
-            )
+            ),
         )
 
         self.conv_layers = nnx.List(layers)
@@ -253,9 +248,7 @@ class ViT(nnx.Module):
         self.pos_embed = nnx.Param(jax.random.normal(rngs(), (1, num_patches + 1, cfg.embed_dim)) * 0.02)
 
         # Transformer blocks (simple self-attention blocks)
-        blocks = []
-        for _ in range(cfg.depth):
-            blocks.append(_ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.mlp_ratio, rngs=rngs))
+        blocks = [_ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.mlp_ratio, rngs=rngs) for _ in range(cfg.depth)]
         self.blocks = nnx.List(blocks)
 
         self.norm = nnx.LayerNorm(num_features=cfg.embed_dim, rngs=rngs)
@@ -358,10 +351,17 @@ class ConvNet(nnx.Module):
         attn_layers: list[nnx.Module] = []
         spatial_shape: tuple[int, int] = (obs_shape[0], obs_shape[1])
 
-        for i, (ch, ks, st) in enumerate(
-            zip(cfg.channels, cfg.conv_cfg.kernel_size if isinstance(cfg.conv_cfg.kernel_size, list) else [cfg.conv_cfg.kernel_size] * len(cfg.channels),
-                cfg.conv_cfg.stride if isinstance(cfg.conv_cfg.stride, list) else [cfg.conv_cfg.stride] * len(cfg.channels),
-                strict=False)
+        for _i, (ch, ks, st) in enumerate(
+            zip(
+                cfg.channels,
+                cfg.conv_cfg.kernel_size
+                if isinstance(cfg.conv_cfg.kernel_size, list)
+                else [cfg.conv_cfg.kernel_size] * len(cfg.channels),
+                cfg.conv_cfg.stride
+                if isinstance(cfg.conv_cfg.stride, list)
+                else [cfg.conv_cfg.stride] * len(cfg.channels),
+                strict=False,
+            ),
         ):
             conv_cfg_i = deepcopy(cfg.conv_cfg)
             conv_cfg_i.kernel_size = ks
@@ -402,7 +402,7 @@ class ConvNet(nnx.Module):
         jax.Array
             Flattened tensor of shape (B, output_dim).
         """
-        for conv, attn in zip(self.conv_layers, self.attn_layers):
+        for conv, attn in zip(self.conv_layers, self.attn_layers, strict=False):
             x = conv(x)
             x = attn(x)
         return x.reshape(x.shape[0], -1)
@@ -439,7 +439,7 @@ class ConvTranspose(nnx.Module):
         for i in range(len(channels) - 1):
             conv_cfg_i = deepcopy(cfg.conv_cfg)
             layers.append(
-                ConvTransposeNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs)
+                ConvTransposeNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs),
             )
 
         # Final layer
@@ -447,7 +447,7 @@ class ConvTranspose(nnx.Module):
         final_cfg.activation = "Identity"
         final_cfg.norm = "none"
         layers.append(
-            ConvTransposeNormActivation(channels[-1], out_channels, final_cfg, rngs=rngs)
+            ConvTransposeNormActivation(channels[-1], out_channels, final_cfg, rngs=rngs),
         )
 
         self.conv_layers = nnx.List(layers)
@@ -502,20 +502,18 @@ class ResNetPixShuffle(nnx.Module):
         for i in range(len(channels) - 1):
             conv_cfg_i = deepcopy(cfg.conv_cfg)
             conv_cfg_i.scale_factor = cfg.scale_factor
-            layers.append(
-                ConvNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs)
-            )
-            layers.append(
+            layers.extend((
+                ConvNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs),
                 ResidualBlock(
                     channels[i + 1],
                     kernel_size=cfg.conv_cfg.kernel_size,
                     activation=cfg.conv_cfg.activation,
                     norm=cfg.conv_cfg.norm,
-                    norm_cfg=cfg.conv_cfg.norm_cfg if cfg.conv_cfg.norm_cfg else None,
+                    norm_cfg=cfg.conv_cfg.norm_cfg or None,
                     dropout=cfg.conv_cfg.dropout,
                     rngs=rngs,
-                )
-            )
+                ),
+            ))
 
         # Final conv to output channels
         final_cfg = ConvConfig(
@@ -594,15 +592,15 @@ class ResNetPixUnshuffle(nnx.Module):
                     kernel_size=cfg.conv_cfg.kernel_size,
                     activation=cfg.conv_cfg.activation,
                     norm=cfg.conv_cfg.norm,
-                    norm_cfg=cfg.conv_cfg.norm_cfg if cfg.conv_cfg.norm_cfg else None,
+                    norm_cfg=cfg.conv_cfg.norm_cfg or None,
                     dropout=cfg.conv_cfg.dropout,
                     rngs=rngs,
-                )
+                ),
             )
             conv_cfg_i = deepcopy(cfg.conv_cfg)
             conv_cfg_i.scale_factor = -cfg.scale_factor
             layers.append(
-                ConvNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs)
+                ConvNormActivation(channels[i], channels[i + 1], conv_cfg_i, rngs=rngs),
             )
 
         self.conv_layers = nnx.List(layers)

@@ -10,7 +10,7 @@ class BaseModule(nnx.Module):
 
     def freeze_weights(self) -> None:
         """Freeze all weight parameters (kernel in Flax)."""
-        graph_def, state = nnx.split(self)
+        _graph_def, state = nnx.split(self)
         flat_state = state.flat_state()
         for key, value in flat_state.items():
             if "kernel" in key and isinstance(value, nnx.VariableState):
@@ -20,7 +20,7 @@ class BaseModule(nnx.Module):
 
     def freeze_biases(self) -> None:
         """Freeze all bias parameters."""
-        graph_def, state = nnx.split(self)
+        _graph_def, state = nnx.split(self)
         flat_state = state.flat_state()
         for key, value in flat_state.items():
             if "bias" in key and isinstance(value, nnx.VariableState):
@@ -30,7 +30,7 @@ class BaseModule(nnx.Module):
 
     def unfreeze_weights(self) -> None:
         """Unfreeze all weight parameters (kernel in Flax)."""
-        graph_def, state = nnx.split(self)
+        _graph_def, state = nnx.split(self)
         flat_state = state.flat_state()
         for key, value in flat_state.items():
             if "kernel" in key and isinstance(value, nnx.VariableState):
@@ -40,7 +40,7 @@ class BaseModule(nnx.Module):
 
     def unfreeze_biases(self) -> None:
         """Unfreeze all bias parameters."""
-        graph_def, state = nnx.split(self)
+        _graph_def, state = nnx.split(self)
         flat_state = state.flat_state()
         for key, value in flat_state.items():
             if "bias" in key and isinstance(value, nnx.VariableState):
