@@ -54,6 +54,9 @@ docs = [
 [tool.mypy]
 python_version = "3.10"
 # plugins = "numpy.typing.mypy_plugin"  # numpy not installed in CI
+exclude = [
+    "src/ml_networks/jax/",  # Exclude JAX modules as they require Python 3.11+
+]
 
 [tool.ruff]
 line-length = 120
