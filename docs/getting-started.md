@@ -10,11 +10,23 @@
 pip install https://github.com/keio-crl/ml-networks.git
 ```
 
+JAXバックエンドも使用する場合は、追加の依存関係をインストールします：
+
+```bash
+pip install jax flax optax distrax
+```
+
 ## 基本的な使用例
 
 !!! tip "ベストプラクティス: YAMLファイルから設定を読み込む"
     設定をPythonコードにベタ書きするのではなく、YAMLファイルから読み込むことを推奨します。
     詳細は[設定管理ガイド](guides/config-management.md)を参照してください。
+
+!!! info "PyTorch/JAXの選択"
+    `ml-networks`はPyTorchとJAXの両方をサポートしています。
+    PyTorchを使用する場合は`from ml_networks.torch import ...`、
+    JAXを使用する場合は`from ml_networks.jax import ...`でインポートしてください。
+    設定クラス（`Config`）は共通で`from ml_networks import ...`でインポートします。
 
 ### MLPの使用
 
@@ -263,5 +275,9 @@ print(dist_z)  # NormalStoch(mean: torch.Size([32, 64]), std: torch.Size([32, 64
 - [MLPガイド](guides/mlp.md) - MLPの詳細な使用方法
 - [Encoderガイド](guides/encoder.md) - Encoderの詳細な使用方法
 - [Decoderガイド](guides/decoder.md) - Decoderの詳細な使用方法
+- [UNetガイド](guides/unet.md) - 条件付きUNetの使用方法
 - [分布ガイド](guides/distributions.md) - 分布の詳細な使用方法
+- [損失関数ガイド](guides/loss-functions.md) - 各種損失関数の使用方法
+- [高度な機能](guides/advanced.md) - HyperNetwork、対照学習、Attention機構
+- [JAXバックエンド](guides/jax.md) - JAX (Flax NNX) での使用方法
 - [API リファレンス](api/index.md) - 完全なAPIドキュメント

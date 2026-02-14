@@ -11,6 +11,9 @@ cd ml-networks
 
 # 開発用依存関係をインストール
 pip install -e ".[dev]"
+
+# JAXバックエンドの開発も行う場合
+pip install -e ".[jax]"
 ```
 
 ## コード品質チェック

@@ -1,5 +1,5 @@
 site_name: ml-networks
-site_description: PyTorchベースの深層学習モデル構築を支援するライブラリ
+site_description: PyTorch/JAXベースの深層学習モデル構築を支援するライブラリ
 site_author: oakwood-fujiken, nomutin
 site_url: https://github.com/keio-crl/ml-networks
 
@@ -32,6 +32,7 @@ theme:
     - content.code.annotate
     - content.code.copy
     - content.code.select
+    - content.tabs.link
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -51,6 +52,7 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+  - tables
 
 plugins:
   - search
@@ -82,10 +84,13 @@ nav:
     - MLP: guides/mlp.md
     - Encoder: guides/encoder.md
     - Decoder: guides/decoder.md
+    - UNet: guides/unet.md
     - Distributions: guides/distributions.md
     - 損失関数: guides/loss-functions.md
     - データの保存と読み込み: guides/data-io.md
     - その他の便利な機能: guides/utilities.md
+    - 高度な機能: guides/advanced.md
+    - JAXバックエンド: guides/jax.md
   - API リファレンス:
     - 概要: api/index.md
     - レイヤー: api/layers.md
@@ -97,4 +102,5 @@ nav:
     - 活性化関数: api/activations.md
     - UNet: api/unet.md
     - その他: api/others.md
+    - JAX API: api/jax.md
   - 開発: development.md
