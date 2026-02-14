@@ -18,6 +18,13 @@
 - Python >= 3.10
 - PyTorch >= 2.0
 
+**JAXモジュールを使用する場合:**
+- Python >= 3.11
+- JAX >= 0.4.30
+- Flax >= 0.12.0
+
+> **注意**: `src/ml_networks/jax/` 配下のJAX実装を使用する場合は、Python 3.11以上が必要です。Flax 0.12.0以降がPython 3.11+を要求するためです。PyTorchベースのモジュール (`src/ml_networks/torch/`) のみを使用する場合は、Python 3.10でも動作します。
+
 ### インストール方法
 
 以下のいずれかの方法でインストールできます：
@@ -25,19 +32,31 @@
 #### pipを使用する場合
 
 ```bash
+# 基本インストール（PyTorchモジュールのみ）
 pip install https://github.com/keio-crl/ml-networks.git
+
+# JAXモジュールを含む場合（Python 3.11+が必要）
+pip install "ml-networks[jax] @ git+https://github.com/keio-crl/ml-networks.git"
 ```
 
 #### ryeを使用する場合
 
 ```bash
+# 基本インストール（PyTorchモジュールのみ）
 rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
+
+# JAXモジュールを含む場合（Python 3.11+が必要）
+rye add "ml-networks[jax]" --git https://github.com/keio-crl/ml-networks.git
 ```
 
 #### uvを使用する場合
 
 ```bash
+# 基本インストール（PyTorchモジュールのみ）
 uv add https://github.com/keio-crl/ml-networks.git
+
+# JAXモジュールを含む場合（Python 3.11+が必要）
+uv add "ml-networks[jax]" --git https://github.com/keio-crl/ml-networks.git
 ```
 
 **注意**: uvを使用する場合は、`<access token>`をGitHubのPersonal Access Tokenに置き換えてください。
@@ -46,6 +65,8 @@ uv add https://github.com/keio-crl/ml-networks.git
 
 主要な機能の使用例を以下に示します。
 詳細なドキュメントは[ドキュメントサイト](https://keio-crl.github.io/ml-networks/)を参照してください。
+
+> **フレームワークについて**: 以下の例はPyTorchベースのモジュール (`ml_networks.torch`) を使用しています。JAXベースの実装 (`ml_networks.jax`) も提供されていますが、Python 3.11以上が必要です。JAXモジュールの使用方法については、ドキュメントサイトを参照してください。
 
 ### 目次
 1. [MLP](#MLP)
