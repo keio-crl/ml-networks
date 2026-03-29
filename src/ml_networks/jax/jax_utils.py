@@ -108,9 +108,7 @@ def softmax(
     """
     x = inputs / temperature
     x = jnp.exp(jax.nn.log_softmax(x, axis=axis))
-    if jnp.isinf(x).any() or jnp.isnan(x).any():
-        msg = "softmax is inf or nan"
-        raise ValueError(msg)
+    
     return x
 
 
