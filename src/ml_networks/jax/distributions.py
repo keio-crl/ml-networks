@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import distrax
 import jax
@@ -260,22 +260,25 @@ def cat_dist(stochs: tuple[StochState, ...], axis: int = -1) -> StochState | Non
         Concatenated distribution.
     """
     if isinstance(stochs[0], NormalStoch):
+        ns = cast("tuple[NormalStoch, ...]", stochs)
         return NormalStoch(
-            jnp.concatenate([s.mean for s in stochs], axis=axis),
-            jnp.concatenate([s.std for s in stochs], axis=axis),
-            jnp.concatenate([s.stoch for s in stochs], axis=axis),
+            jnp.concatenate([s.mean for s in ns], axis=axis),
+            jnp.concatenate([s.std for s in ns], axis=axis),
+            jnp.concatenate([s.stoch for s in ns], axis=axis),
         )
     if isinstance(stochs[0], CategoricalStoch):
+        cs = cast("tuple[CategoricalStoch, ...]", stochs)
         return CategoricalStoch(
-            jnp.concatenate([s.logits for s in stochs], axis=axis),
-            jnp.concatenate([s.probs for s in stochs], axis=axis),
-            jnp.concatenate([s.stoch for s in stochs], axis=axis),
+            jnp.concatenate([s.logits for s in cs], axis=axis),
+            jnp.concatenate([s.probs for s in cs], axis=axis),
+            jnp.concatenate([s.stoch for s in cs], axis=axis),
         )
     if isinstance(stochs[0], BernoulliStoch):
+        bs = cast("tuple[BernoulliStoch, ...]", stochs)
         return BernoulliStoch(
-            jnp.concatenate([s.logits for s in stochs], axis=axis),
-            jnp.concatenate([s.probs for s in stochs], axis=axis),
-            jnp.concatenate([s.stoch for s in stochs], axis=axis),
+            jnp.concatenate([s.logits for s in bs], axis=axis),
+            jnp.concatenate([s.probs for s in bs], axis=axis),
+            jnp.concatenate([s.stoch for s in bs], axis=axis),
         )
     return None
 
@@ -297,22 +300,25 @@ def stack_dist(stochs: tuple[StochState, ...], axis: int = 0) -> StochState | No
         Stacked distribution.
     """
     if isinstance(stochs[0], NormalStoch):
+        ns = cast("tuple[NormalStoch, ...]", stochs)
         return NormalStoch(
-            jnp.stack([s.mean for s in stochs], axis=axis),
-            jnp.stack([s.std for s in stochs], axis=axis),
-            jnp.stack([s.stoch for s in stochs], axis=axis),
+            jnp.stack([s.mean for s in ns], axis=axis),
+            jnp.stack([s.std for s in ns], axis=axis),
+            jnp.stack([s.stoch for s in ns], axis=axis),
         )
     if isinstance(stochs[0], CategoricalStoch):
+        cs = cast("tuple[CategoricalStoch, ...]", stochs)
         return CategoricalStoch(
-            jnp.stack([s.logits for s in stochs], axis=axis),
-            jnp.stack([s.probs for s in stochs], axis=axis),
-            jnp.stack([s.stoch for s in stochs], axis=axis),
+            jnp.stack([s.logits for s in cs], axis=axis),
+            jnp.stack([s.probs for s in cs], axis=axis),
+            jnp.stack([s.stoch for s in cs], axis=axis),
         )
     if isinstance(stochs[0], BernoulliStoch):
+        bs = cast("tuple[BernoulliStoch, ...]", stochs)
         return BernoulliStoch(
-            jnp.stack([s.logits for s in stochs], axis=axis),
-            jnp.stack([s.probs for s in stochs], axis=axis),
-            jnp.stack([s.stoch for s in stochs], axis=axis),
+            jnp.stack([s.logits for s in bs], axis=axis),
+            jnp.stack([s.probs for s in bs], axis=axis),
+            jnp.stack([s.stoch for s in bs], axis=axis),
         )
     return None
 

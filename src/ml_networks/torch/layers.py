@@ -95,13 +95,6 @@ class LinearNormActivation(nn.Module):
     """
     Linear layer with normalization and activation, and dropouts.
 
-    References
-    ----------
-    LayerNorm: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
-    RMSNorm: https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html
-    Linear: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
-    Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
-
     Parameters
     ----------
     input_dim : int
@@ -110,6 +103,13 @@ class LinearNormActivation(nn.Module):
         Output dimension.
     cfg : LinearConfig
         Linear layer configuration.
+
+    References
+    ----------
+    LayerNorm: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+    RMSNorm: https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html
+    Linear: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
 
     Examples
     --------
@@ -350,6 +350,15 @@ class ConvNormActivation(nn.Module):
     """
     Convolutional layer with normalization and activation, and dropouts.
 
+    Parameters
+    ----------
+    in_channels : int
+        Input channels.
+    out_channels : int
+        Output channels.
+    cfg : ConvConfig
+        Convolutional layer configuration.
+
     References
     ----------
     PixelShuffle: https://pytorch.org/docs/stable/generated/torch.nn.PixelShuffle.html
@@ -360,15 +369,6 @@ class ConvNormActivation(nn.Module):
     InstanceNorm2d: https://pytorch.org/docs/stable/generated/torch.nn.InstanceNorm2d.html
     Conv2d: https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
     Dropout: https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
-
-    Parameters
-    ----------
-    in_channels : int
-        Input channels.
-    out_channels : int
-        Output channels.
-    cfg : ConvConfig
-        Convolutional layer configuration.
 
     Examples
     --------

@@ -14,8 +14,11 @@ from .distributions import (
 )
 from .hypernetworks import HyperNet
 from .jax_utils import (
+    JaxModelSummary,
+    JaxTrainer,
     MinMaxNormalize,
     SoftmaxTransformation,
+    count_nnx_params,
     get_optimizer,
     gumbel_softmax,
     jax_fix_seed,
@@ -64,6 +67,8 @@ __all__ = [
     "Encoder",
     "FocalFrequencyLoss",
     "HyperNet",
+    "JaxModelSummary",
+    "JaxTrainer",
     "LinearNormActivation",
     "MLPLayer",
     "MinMaxNormalize",
@@ -84,6 +89,7 @@ __all__ = [
     "binary_focal_loss",
     "cat_dist",
     "charbonnier",
+    "count_nnx_params",
     "focal_loss",
     "get_dist",
     "get_norm",

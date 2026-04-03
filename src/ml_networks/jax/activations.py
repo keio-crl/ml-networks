@@ -79,14 +79,14 @@ class REReLU(nnx.Module):
     """
     Reparametarized ReLU activation function. This backward pass is differentiable.
 
-    References
-    ----------
-    https://openreview.net/forum?id=lNCnZwcH5Z
-
     Parameters
     ----------
     reparametarize_fn : str
         Reparametarization function. Default is GELU.
+
+    References
+    ----------
+    https://openreview.net/forum?id=lNCnZwcH5Z
 
     Examples
     --------
@@ -122,14 +122,14 @@ class CRReLU(nnx.Module):
     """
     Correction Regularized ReLU activation function. This is a variant of ReLU activation function.
 
-    References
-    ----------
-    https://openreview.net/forum?id=7TZYM6Hm9p
-
     Parameters
     ----------
     lr : float
         Learning rate. Default is 0.01.
+
+    References
+    ----------
+    https://openreview.net/forum?id=7TZYM6Hm9p
 
     Examples
     --------
@@ -153,14 +153,14 @@ class SiGLU(nnx.Module):
 
     This is equivalent to SwiGLU (Swish variant of Gated Linear Unit) activation function.
 
-    References
-    ----------
-    https://arxiv.org/abs/2102.11972
-
     Parameters
     ----------
     dim : int
         Dimension to split the tensor. Default is -1.
+
+    References
+    ----------
+    https://arxiv.org/abs/2102.11972
 
     Examples
     --------

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 from typing import Any
 
@@ -9,9 +10,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import pytorch_lightning as pl
 from einops import rearrange
+from flax import nnx
+from pytorch_lightning.callbacks.model_summary import ModelSummary as _PLModelSummary
 
 from ml_networks.config import SoftmaxTransConfig
+
+_log = logging.getLogger(__name__)
 
 
 class MinMaxNormalize:
@@ -28,6 +34,22 @@ class MinMaxNormalize:
 
     def __call__(self, x: jax.Array) -> jax.Array:
         return x * self.scale + self.shift
+
+
+def numpy_collate(batch: tuple | list) -> np.ndarray | list | dict:
+    """Collate function that returns NumPy arrays instead of torch.Tensors.
+
+    Drop-in replacement for PyTorch's default_collate. Used with DataLoader
+    so that batches are NumPy arrays, ready for conversion to JAX arrays.
+    """
+    if isinstance(batch[0], np.ndarray):
+        return np.stack(batch)
+    if isinstance(batch[0], tuple | list):
+        transposed = zip(*batch, strict=False)
+        return [numpy_collate(samples) for samples in transposed]
+    if isinstance(batch[0], dict):
+        return {key: numpy_collate([d[key] for d in batch]) for key in batch[0]}
+    return np.array(batch)
 
 
 def get_optimizer(
@@ -101,15 +123,9 @@ def softmax(
     jax.Array
         Softmaxed tensor.
 
-    Raises
-    ------
-    ValueError
-        If the softmax is inf or nan.
     """
     x = inputs / temperature
-    x = jnp.exp(jax.nn.log_softmax(x, axis=axis))
-    
-    return x
+    return jnp.exp(jax.nn.log_softmax(x, axis=axis))
 
 
 def gumbel_softmax(
@@ -275,6 +291,188 @@ class SoftmaxTransformation:
 
         data = jnp.concatenate([data, ignored], axis=-1) if self.n_ignore else data
         return data.reshape(*batch, -1)
+
+
+def count_nnx_params(model: nnx.Module) -> tuple[int, int]:
+    """Flax NNX モデルのパラメータ数をカウントする.
+
+    Parameters
+    ----------
+    model : nnx.Module
+        Flax NNX モデル.
+
+    Returns
+    -------
+    tuple[int, int]
+        (total_params, trainable_params)
+    """
+    _, state = nnx.split(model)
+    flat = state.flat_state()
+    total = 0
+    trainable = 0
+    for leaf in flat.leaves:
+        if isinstance(leaf, nnx.VariableState):
+            size = leaf.value.size
+            total += size
+            if issubclass(leaf.type, nnx.Param):
+                trainable += size
+    return total, trainable
+
+
+def _find_nnx_modules(
+    lightning_module: pl.LightningModule,
+) -> list[tuple[str, nnx.Module]]:
+    """JaxLightningModule の直接属性から nnx.Module を探索する."""
+    found: list[tuple[str, nnx.Module]] = []
+    seen_ids: set[int] = set()
+    for name, attr in vars(lightning_module).items():
+        if isinstance(attr, nnx.Module) and id(attr) not in seen_ids:
+            found.append((name, attr))
+            seen_ids.add(id(attr))
+    return found
+
+
+def _compute_model_size_mb(model: nnx.Module) -> float:
+    """NNX モデルの推定サイズ (MB) を計算する."""
+    _, state = nnx.split(model)
+    flat = state.flat_state()
+    total_bytes = 0
+    for leaf in flat.leaves:
+        if isinstance(leaf, nnx.VariableState):
+            arr = leaf.value
+            total_bytes += arr.size * arr.dtype.itemsize
+    return total_bytes / 1e6
+
+
+def _human_readable_count(number: int) -> str:
+    """整数を K, M, B, T 付きの読みやすい文字列に変換する."""
+    abbrevs = [(1_000_000_000_000, "T"), (1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")]
+    for threshold, suffix in abbrevs:
+        if abs(number) >= threshold:
+            return f"{number / threshold:.1f} {suffix}"
+    return f"{number}  "
+
+
+def _format_jax_summary(
+    summary_data: list[tuple[str, list[str]]],
+    total_params: int,
+    trainable_params: int,
+    model_size_mb: float,
+) -> str:
+    """JAX モデルサマリーテーブルを生成する."""
+    n_rows = len(summary_data[0][1])
+
+    col_widths = []
+    for header, values in summary_data:
+        w = max((len(str(v)) for v in values), default=0)
+        col_widths.append(max(w, len(header)))
+
+    fmt = "{:<{}}"
+    total_width = sum(col_widths) + 3 * (1 + len(summary_data))
+    header_line = " | ".join(fmt.format(h, w) for (h, _), w in zip(summary_data, col_widths, strict=True))
+
+    lines = [header_line, "-" * total_width]
+    for i in range(n_rows):
+        row = " | ".join(fmt.format(str(vals[i]), w) for (_, vals), w in zip(summary_data, col_widths, strict=True))
+        lines.append(row)
+    lines.append("-" * total_width)
+
+    s = "{:<10}"
+    lines.extend((
+        s.format(_human_readable_count(trainable_params)) + "Trainable params",
+        s.format(_human_readable_count(total_params - trainable_params)) + "Non-trainable params",
+        s.format(_human_readable_count(total_params)) + "Total params",
+        s.format(f"{model_size_mb:,.3f}") + "Total estimated model params size (MB)",
+    ))
+
+    return "\n".join(lines)
+
+
+class JaxModelSummary(_PLModelSummary):
+    """Flax NNX パラメータを正しくカウントする ModelSummary コールバック.
+
+    JaxLightningModule の場合、NNX モデルのパラメータをカウントして表示する。
+    通常の LightningModule の場合はデフォルトの PL サマリーにフォールバックする。
+    """
+
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        from ml_networks.jax.base import JaxLightningModule
+
+        if not self._max_depth:
+            return
+
+        if not isinstance(pl_module, JaxLightningModule):
+            super().on_fit_start(trainer, pl_module)
+            return
+
+        nnx_modules = _find_nnx_modules(pl_module)
+        if not nnx_modules:
+            super().on_fit_start(trainer, pl_module)
+            return
+
+        # 各 NNX モジュールのパラメータ数を集計
+        names: list[str] = []
+        types: list[str] = []
+        param_counts: list[int] = []
+        total_params = 0
+        trainable_params = 0
+        total_size_mb = 0.0
+
+        for name, module in nnx_modules:
+            t, tr = count_nnx_params(module)
+            names.append(name)
+            types.append(type(module).__name__)
+            param_counts.append(t)
+            total_params += t
+            trainable_params += tr
+            total_size_mb += _compute_model_size_mb(module)
+
+        summary_data: list[tuple[str, list[str]]] = [
+            (" ", [str(i) for i in range(len(names))]),
+            ("Name", names),
+            ("Type", types),
+            ("Params", [_human_readable_count(c) for c in param_counts]),
+        ]
+
+        if trainer.is_global_zero:
+            summary_table = _format_jax_summary(
+                summary_data,
+                total_params,
+                trainable_params,
+                total_size_mb,
+            )
+            _log.info("\n" + summary_table)
+
+
+class JaxTrainer(pl.Trainer):
+    """Flax NNX パラメータ数を正しく表示する PyTorch Lightning Trainer ラッパー.
+
+    JaxLightningModule を使用するモデルで ``fit()`` を呼び出すと、
+    Flax NNX モデルのパラメータ数が正しく表示される。
+
+    Examples
+    --------
+    >>> trainer = JaxTrainer(max_epochs=10)
+    >>> trainer.fit(my_jax_lightning_module, dataloader)
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("enable_model_summary", False)
+
+        callbacks = kwargs.get("callbacks")
+        if callbacks is None:
+            callbacks = []
+        elif not isinstance(callbacks, list):
+            callbacks = [callbacks]
+        else:
+            callbacks = list(callbacks)
+
+        has_summary = any(isinstance(cb, _PLModelSummary) for cb in callbacks)
+        if not has_summary:
+            callbacks.append(JaxModelSummary())
+
+        kwargs["callbacks"] = callbacks
+        super().__init__(**kwargs)
 
 
 if __name__ == "__main__":
