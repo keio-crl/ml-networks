@@ -461,7 +461,7 @@ class BernoulliStoch:
             msg = "probs must be in the range [0, 1]."
             raise ValueError(msg)
 
-    def __getitem__(self, idx: int | slice | tuple) -> CategoricalStoch:
+    def __getitem__(self, idx: int | slice | tuple) -> BernoulliStoch:
         """インデックスアクセス.
 
         Parameters
@@ -471,10 +471,10 @@ class BernoulliStoch:
 
         Returns
         -------
-        CategoricalStoch
-            指定されたインデックスに対応する`CategoricalStoch`。
+        BernoulliStoch
+            指定されたインデックスに対応する`BernoulliStoch`。
         """
-        return CategoricalStoch(self.logits[idx], self.probs[idx], self.stoch[idx])
+        return BernoulliStoch(self.logits[idx], self.probs[idx], self.stoch[idx])
 
     def __len__(self) -> int:
         """長さを返す.
@@ -513,8 +513,8 @@ class BernoulliStoch:
         """
         if hasattr(torch.Tensor, name):  # torch.Tensor のメソッドか確認
 
-            def method(*args: Any, **kwargs: Any) -> CategoricalStoch:
-                return CategoricalStoch(
+            def method(*args: Any, **kwargs: Any) -> BernoulliStoch:
+                return BernoulliStoch(
                     getattr(self.logits, name)(*args, **kwargs),
                     getattr(self.probs, name)(*args, **kwargs),
                     getattr(self.stoch, name)(*args, **kwargs),
