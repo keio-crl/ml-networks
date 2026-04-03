@@ -186,7 +186,7 @@ class ConditionalUnet2d(nn.Module):
             x = downsample(x)
 
         for mid_module in self.mid_modules:
-            x = mid_module(x, global_feature)
+            x = mid_module(x) if isinstance(mid_module, nn.Identity) else mid_module(x, global_feature)
 
         for modules in self.up_modules:
             resnet, attn, resnet2, upsample = modules
