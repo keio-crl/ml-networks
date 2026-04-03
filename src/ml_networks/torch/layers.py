@@ -180,8 +180,9 @@ class LinearNormActivation(nn.Module):
         else:
             normalized_shape = output_dim * 2 if "glu" in cfg.activation.lower() else output_dim
 
-        cfg.norm_cfg["normalized_shape"] = normalized_shape
-        self.norm = get_norm(cfg.norm, **cfg.norm_cfg)
+        norm_cfg = dict(cfg.norm_cfg)
+        norm_cfg["normalized_shape"] = normalized_shape
+        self.norm = get_norm(cfg.norm, **norm_cfg)
         self.activation = Activation(cfg.activation)
         self.dropout: nn.Module
         if cfg.dropout > 0:
@@ -340,7 +341,7 @@ class MLPLayer(pl.LightningModule):
         layers += [LinearNormActivation(self.input_dim, self.hidden_dim, self.cfg.linear_cfg)]
         for _ in range(self.n_layers - 1):
             layers += [LinearNormActivation(self.hidden_dim, self.hidden_dim, self.cfg.linear_cfg)]
-        last_cfg = self.cfg.linear_cfg
+        last_cfg = deepcopy(self.cfg.linear_cfg)
         last_cfg.activation = self.cfg.output_activation
         layers += [LinearNormActivation(self.hidden_dim, self.output_dim, last_cfg)]
         return nn.Sequential(*layers)
@@ -438,15 +439,16 @@ class ConvNormActivation(nn.Module):
             bias=cfg.bias,
             padding_mode=cfg.padding_mode,
         )
+        norm_cfg = dict(cfg.norm_cfg) if cfg.norm_cfg else {}
         if cfg.norm != "none" and cfg.norm != "group":
-            cfg.norm_cfg["num_features"] = out_channels_
+            norm_cfg["num_features"] = out_channels_
         elif cfg.norm == "group":
-            cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
+            norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
         norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
             "batch2d" if cfg.norm == "batch" else cfg.norm
         )  # type: ignore[assignment]
-        self.norm = get_norm(norm_type, **cfg.norm_cfg)
+        self.norm = get_norm(norm_type, **norm_cfg)
         self.pixel_shuffle: nn.Module
         if cfg.scale_factor > 0:
             self.pixel_shuffle = nn.PixelShuffle(cfg.scale_factor)
@@ -572,10 +574,11 @@ class ConvNormActivation1d(nn.Module):
             bias=cfg.bias,
             padding_mode=cfg.padding_mode,
         )
+        norm_cfg = dict(cfg.norm_cfg) if cfg.norm_cfg else {}
         if cfg.norm != "none" and cfg.norm != "group":
-            cfg.norm_cfg["num_features"] = out_channels_
+            norm_cfg["num_features"] = out_channels_
         elif cfg.norm == "group":
-            cfg.norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
+            norm_cfg["num_channels"] = in_channels if cfg.norm_first else out_channels_
 
         if cfg.scale_factor > 0:
             self.horizontal_shuffle: nn.Module = HorizonShuffle(cfg.scale_factor)
@@ -587,7 +590,7 @@ class ConvNormActivation1d(nn.Module):
         norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
             "batch1d" if cfg.norm == "batch" else cfg.norm
         )  # type: ignore[assignment]
-        self.norm = get_norm(norm_type, **cfg.norm_cfg)
+        self.norm = get_norm(norm_type, **norm_cfg)
         self.activation = Activation(cfg.activation, dim=-2)
         self.dropout: nn.Module = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
         self.norm_first = cfg.norm_first
@@ -793,14 +796,15 @@ class ConvTransposeNormActivation(nn.Module):
             bias=cfg.bias,
             dilation=cfg.dilation,
         )
+        norm_cfg = dict(cfg.norm_cfg) if cfg.norm_cfg else {}
         if cfg.norm not in {"none", "group"}:
-            cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+            norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
-            cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+            norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
             "batch2d" if cfg.norm == "batch" else cfg.norm
         )  # type: ignore[assignment]
-        self.norm = get_norm(norm_type, **cfg.norm_cfg)
+        self.norm = get_norm(norm_type, **norm_cfg)
         self.activation = Activation(cfg.activation, dim=-3)
         self.dropout: nn.Module = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
@@ -900,14 +904,15 @@ class ConvTransposeNormActivation1d(nn.Module):
             bias=cfg.bias,
             dilation=cfg.dilation,
         )
+        norm_cfg = dict(cfg.norm_cfg) if cfg.norm_cfg else {}
         if cfg.norm not in {"none", "group"}:
-            cfg.norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+            norm_cfg["num_features"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         elif cfg.norm == "group":
-            cfg.norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
+            norm_cfg["num_channels"] = out_channels * 2 if "glu" in cfg.activation.lower() else out_channels
         norm_type: Literal["layer", "rms", "group", "batch2d", "batch1d", "none"] = (
             "batch1d" if cfg.norm == "batch" else cfg.norm
         )  # type: ignore[assignment]
-        self.norm = get_norm(norm_type, **cfg.norm_cfg)
+        self.norm = get_norm(norm_type, **norm_cfg)
         self.activation = Activation(cfg.activation, dim=-2)
         self.dropout = nn.Dropout(cfg.dropout) if cfg.dropout > 0 else nn.Identity()
 
@@ -1208,7 +1213,7 @@ class Attention2d(nn.Module):
             activation="Identity",
             dropout=0.0,
         )
-        first_cfg = cfg
+        first_cfg = deepcopy(cfg)
         first_cfg.norm_first = True
         self.qkv = ConvNormActivation(channels, channels * 3, first_cfg)
 
@@ -1282,7 +1287,7 @@ class Attention1d(nn.Module):
             activation="Identity",
             dropout=0.0,
         )
-        first_cfg = cfg
+        first_cfg = deepcopy(cfg)
         first_cfg.norm_first = True
         self.qkv = ConvNormActivation1d(channels, channels * 3, first_cfg)
 
