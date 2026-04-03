@@ -8,9 +8,11 @@ from typing import cast
 import jax
 import jax.numpy as jnp
 import numpy as np
+from einops import rearrange
 from flax import nnx
 
 from ml_networks.config import (
+    AdaptiveAveragePoolingConfig,
     ConvConfig,
     ConvNetConfig,
     LinearConfig,
@@ -27,8 +29,10 @@ from ml_networks.jax.layers import (
     LinearNormActivation,
     MLPLayer,
     PatchEmbed,
+    PositionalEncoding,
     ResidualBlock,
     SpatialSoftmax,
+    TransformerLayer,
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape
 
@@ -47,7 +51,7 @@ class Encoder(nnx.Module):
         Observation shape in (H, W, C) format.
     backbone_cfg : ViTConfig | ConvNetConfig | ResNetConfig
         Backbone configuration.
-    fc_cfg : MLPConfig | LinearConfig | SpatialSoftmaxConfig | None
+    fc_cfg : MLPConfig | LinearConfig | SpatialSoftmaxConfig | AdaptiveAveragePoolingConfig | None
         Fully-connected layer configuration. Required when ``feature_dim`` is int.
     rngs : nnx.Rngs
         Random number generators.
@@ -58,7 +62,7 @@ class Encoder(nnx.Module):
         feature_dim: int | tuple[int, int, int],
         obs_shape: tuple[int, int, int],
         backbone_cfg: ViTConfig | ConvNetConfig | ResNetConfig,
-        fc_cfg: MLPConfig | LinearConfig | SpatialSoftmaxConfig | None = None,
+        fc_cfg: MLPConfig | LinearConfig | SpatialSoftmaxConfig | AdaptiveAveragePoolingConfig | None = None,
         *,
         rngs: nnx.Rngs,
     ) -> None:
@@ -68,22 +72,29 @@ class Encoder(nnx.Module):
         self.encoder: nnx.Module
         if isinstance(backbone_cfg, ViTConfig):
             self.encoder = ViT(obs_shape, backbone_cfg, rngs=rngs)
-            self.last_channel: int = self.encoder.output_dim
-            self.conved_size: int = self.encoder.output_dim
+            self.last_channel: int = self.encoder.last_channel
+            self.conved_size: int = cast("int", self.encoder.conved_size)
+            self.conved_shape: tuple[int, ...] = cast("tuple[int, ...]", self.encoder.conved_shape)
         elif isinstance(backbone_cfg, ConvNetConfig):
             self.encoder = ConvNet(obs_shape, backbone_cfg, rngs=rngs)
-            self.last_channel = self.encoder.output_channels
-            self.conved_size = self.encoder.output_dim
+            self.last_channel = self.encoder.last_channel
+            self.conved_size = cast("int", self.encoder.conved_size)
+            self.conved_shape = cast("tuple[int, ...]", self.encoder.conved_shape)
         elif isinstance(backbone_cfg, ResNetConfig):
             self.encoder = ResNetPixUnshuffle(obs_shape, backbone_cfg, rngs=rngs)
             self.last_channel = self.encoder.last_channel
             self.conved_size = cast("int", self.encoder.conved_size)
+            self.conved_shape = cast("tuple[int, ...]", self.encoder.conved_shape)
         else:
             msg = f"{type(backbone_cfg)} is not implemented"
             raise NotImplementedError(msg)
 
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is int"
+        else:
+            assert feature_dim == (self.last_channel, *self.conved_shape), (
+                f"{feature_dim} != {(self.last_channel, *self.conved_shape)}"
+            )
 
         self.fc: nnx.Module
         if isinstance(fc_cfg, MLPConfig):
@@ -92,12 +103,38 @@ class Encoder(nnx.Module):
         elif isinstance(fc_cfg, LinearConfig):
             assert isinstance(feature_dim, int)
             self.fc = LinearNormActivation(self.conved_size, feature_dim, fc_cfg, rngs=rngs)
+        elif isinstance(fc_cfg, AdaptiveAveragePoolingConfig):
+            assert isinstance(feature_dim, int)
+            output_size = fc_cfg.output_size
+            pooled_size = int(self.last_channel * np.prod(output_size))
+            if isinstance(fc_cfg.additional_layer, LinearConfig):
+                self.fc = LinearNormActivation(pooled_size, feature_dim, fc_cfg.additional_layer, rngs=rngs)
+            elif isinstance(fc_cfg.additional_layer, MLPConfig):
+                self.fc = MLPLayer(pooled_size, feature_dim, fc_cfg.additional_layer, rngs=rngs)
+            else:
+                self.fc = Identity()
+            if fc_cfg.additional_layer is None:
+                self.feature_dim = pooled_size
+            self._adaptive_pool_output_size = output_size
         elif isinstance(fc_cfg, SpatialSoftmaxConfig):
             assert isinstance(feature_dim, int)
-            self.fc = SpatialSoftmax(fc_cfg)
-            self.feature_dim = self.last_channel * 2
+            if isinstance(fc_cfg.additional_layer, LinearConfig):
+                self.fc = LinearNormActivation(
+                    self.last_channel * 2,
+                    feature_dim,
+                    fc_cfg.additional_layer,
+                    rngs=rngs,
+                )
+            elif isinstance(fc_cfg.additional_layer, MLPConfig):
+                self.fc = MLPLayer(self.last_channel * 2, feature_dim, fc_cfg.additional_layer, rngs=rngs)
+            else:
+                self.fc = Identity()
+            if fc_cfg.additional_layer is None:
+                self.feature_dim = self.last_channel * 2
+            self._spatial_softmax = SpatialSoftmax(fc_cfg)
         else:
             self.fc = Identity()
+        self._fc_cfg = fc_cfg
 
     def __call__(self, x: jax.Array) -> jax.Array:
         """
@@ -116,7 +153,20 @@ class Encoder(nnx.Module):
         batch_shape = x.shape[:-3]
         x = x.reshape(-1, *self.obs_shape)
         x = self.encoder(x)
-        if isinstance(self.fc, SpatialSoftmax):
+        if isinstance(self._fc_cfg, AdaptiveAveragePoolingConfig):
+            # NHWC adaptive average pooling: (B, H, W, C) -> (B, oh, ow, C)
+            pool_size = self._adaptive_pool_output_size
+            assert isinstance(pool_size, tuple)
+            oh, ow = pool_size
+            b, h, w, c = x.shape
+            # Reshape to windows and average
+            x = x.reshape(b, oh, h // oh, ow, w // ow, c)
+            x = x.mean(axis=(2, 4))
+            x = x.reshape(b, -1)
+            x = self.fc(x)
+        elif isinstance(self._fc_cfg, SpatialSoftmaxConfig):
+            x = self._spatial_softmax(x)
+            x = x.reshape(x.shape[0], -1)
             x = self.fc(x)
         else:
             x = x.reshape(x.shape[0], -1)
@@ -136,7 +186,7 @@ class Decoder(nnx.Module):
         If tuple, input is passed directly to the backbone.
     obs_shape : tuple[int, int, int]
         Output observation shape in (H, W, C) format.
-    backbone_cfg : ConvNetConfig | ResNetConfig
+    backbone_cfg : ConvNetConfig | ViTConfig | ResNetConfig
         Backbone configuration.
     fc_cfg : MLPConfig | LinearConfig | None
         Fully-connected layer configuration. Required when ``feature_dim`` is int.
@@ -148,7 +198,7 @@ class Decoder(nnx.Module):
         self,
         feature_dim: int | tuple[int, int, int],
         obs_shape: tuple[int, int, int],
-        backbone_cfg: ConvNetConfig | ResNetConfig,
+        backbone_cfg: ConvNetConfig | ViTConfig | ResNetConfig,
         fc_cfg: MLPConfig | LinearConfig | None = None,
         *,
         rngs: nnx.Rngs,
@@ -157,7 +207,9 @@ class Decoder(nnx.Module):
         self.feature_dim = feature_dim
 
         self.input_shape: tuple[int, int, int]
-        if isinstance(backbone_cfg, ConvNetConfig):
+        if isinstance(backbone_cfg, ViTConfig):
+            self.input_shape = ViT.get_input_shape(obs_shape, backbone_cfg)
+        elif isinstance(backbone_cfg, ConvNetConfig):
             self.input_shape = cast(
                 "tuple[int, int, int]",
                 ConvTranspose.get_input_shape(obs_shape, backbone_cfg),
@@ -186,8 +238,15 @@ class Decoder(nnx.Module):
         else:
             self.fc = Identity()
 
-        if isinstance(backbone_cfg, ConvNetConfig):
-            self.decoder: nnx.Module = ConvTranspose(
+        if isinstance(backbone_cfg, ViTConfig):
+            self.decoder: nnx.Module = ViT(
+                in_shape=self.input_shape,
+                cfg=backbone_cfg,
+                obs_shape=obs_shape,
+                rngs=rngs,
+            )
+        elif isinstance(backbone_cfg, ConvNetConfig):
+            self.decoder = ConvTranspose(
                 in_shape=self.input_shape,
                 obs_shape=obs_shape,
                 cfg=backbone_cfg,
@@ -228,48 +287,64 @@ class Decoder(nnx.Module):
 
 class ViT(nnx.Module):
     """
-    Vision Transformer (NHWC format).
+    Vision Transformer for Encoder and Decoder (NHWC format).
 
     Parameters
     ----------
-    obs_shape : tuple[int, int, int]
-        Observation shape in (H, W, C) format.
+    in_shape : tuple[int, int, int]
+        Input shape in (H, W, C) format.
     cfg : ViTConfig
         ViT configuration.
+    obs_shape : tuple[int, int, int] | None
+        Output shape in (H, W, C) format. If None, acts as encoder.
     rngs : nnx.Rngs
         Random number generators.
     """
 
     def __init__(
         self,
-        obs_shape: tuple[int, int, int],
+        in_shape: tuple[int, int, int],
         cfg: ViTConfig,
+        obs_shape: tuple[int, int, int] | None = None,
         *,
         rngs: nnx.Rngs,
     ) -> None:
         self.cfg = cfg
-        self.obs_shape = obs_shape
+        self.in_shape = in_shape
+        self.obs_shape = obs_shape if obs_shape is not None else in_shape
+        self.patch_size = cfg.patch_size
 
         t_cfg = cfg.transformer_cfg
-        self.patch_embed = PatchEmbed(t_cfg.d_model, cfg.patch_size, obs_shape, rngs=rngs)
-        num_patches = self.patch_embed.patch_num
+        self.transformer_cfg = t_cfg
+        # NHWC: (H, W, C) -> patch_dim = patch_size^2 * C
+        self.in_patch_dim = self.get_patch_dim(in_shape)
+        self.out_patch_dim = self.get_patch_dim(obs_shape) if obs_shape is not None else t_cfg.d_model
 
-        # CLS token
-        self.cls_token = nnx.Param(jax.random.normal(rngs(), (1, 1, t_cfg.d_model)) * 0.02)
-
-        # Position embedding
-        self.pos_embed = nnx.Param(
-            jax.random.normal(rngs(), (1, num_patches + 1, t_cfg.d_model)) * 0.02,
+        self.positional_encoding = PositionalEncoding(
+            self.in_patch_dim,
+            t_cfg.dropout,
+            max_len=self.get_n_patches(in_shape),
+            rngs=rngs,
         )
+        self.vit = TransformerLayer(self.in_patch_dim, self.out_patch_dim, t_cfg, rngs=rngs)
 
-        # Transformer blocks
-        blocks = [_ViTBlock(t_cfg.d_model, t_cfg.nhead, t_cfg.dim_ff, rngs=rngs) for _ in range(t_cfg.n_layers)]
-        self.blocks = nnx.List(blocks)
+        self.is_encoder = obs_shape is None
+        if self.is_encoder:
+            self.n_patches = self.get_n_patches(in_shape)
+            self.patch_embed = PatchEmbed(
+                emb_dim=self.in_patch_dim,
+                patch_size=self.patch_size,
+                obs_shape=in_shape,
+                rngs=rngs,
+            )
 
-        self.norm = nnx.LayerNorm(num_features=t_cfg.d_model, rngs=rngs)
-        self.output_dim = t_cfg.d_model
+        self.should_unpatchify = cfg.unpatchify
+        if cfg.cls_token:
+            self._cls_token = nnx.Param(jax.random.normal(rngs(), (1, 1, self.in_patch_dim)) * 0.02)
+        self.last_channel = self.get_n_patches(in_shape)
+        self.output_dim = self.out_patch_dim
 
-    def __call__(self, x: jax.Array) -> jax.Array:
+    def __call__(self, x: jax.Array, *, return_cls_token: bool = False) -> jax.Array:
         """
         Forward pass.
 
@@ -277,29 +352,88 @@ class ViT(nnx.Module):
         ----------
         x : jax.Array
             Input tensor of shape (B, H, W, C) in NHWC format.
+        return_cls_token : bool
+            Whether to return CLS token only. Default is False.
 
         Returns
         -------
         jax.Array
-            CLS token output of shape (B, d_model).
+            Output tensor.
         """
-        t_cfg = self.cfg.transformer_cfg
-        # (B, H, W, C) -> (B, Np, D)
-        x = self.patch_embed(x)
-        b = x.shape[0]
+        x = self.patch_embed(x) if self.is_encoder else self.patchify(x)
+        x = self.positional_encoding(x)
+        if hasattr(self, "_cls_token"):
+            cls_token = jnp.broadcast_to(self._cls_token.value, (x.shape[0], 1, x.shape[-1]))
+            x = jnp.concatenate([cls_token, x], axis=1)
+        x = self.vit(x)
+        if hasattr(self, "_cls_token"):
+            cls_token = x[:, 0]
+            x = x[:, 1:]
+        if self.should_unpatchify:
+            x = self.unpatchify(x)
+        if return_cls_token and hasattr(self, "_cls_token"):
+            return cls_token
+        return x
 
-        # Prepend CLS token
-        cls_tokens = jnp.broadcast_to(self.cls_token.value, (b, 1, t_cfg.d_model))
-        x = jnp.concatenate([cls_tokens, x], axis=1)
+    def patchify(self, imgs: jax.Array) -> jax.Array:
+        """Split images into patches.
 
-        # Add position embedding
-        x = x + self.pos_embed.value
+        Parameters
+        ----------
+        imgs : jax.Array
+            Input images of shape (N, H, W, C) in NHWC format.
 
-        for block in self.blocks:
-            x = block(x)
+        Returns
+        -------
+        jax.Array
+            Patchified images of shape (N, L, patch_size**2 * C).
+        """
+        p = self.patch_size
+        return rearrange(imgs, "n (h p1) (w p2) c -> n (h w) (p1 p2 c)", p1=p, p2=p)
 
-        x = self.norm(x)
-        return x[:, 0]  # CLS token
+    def unpatchify(self, x: jax.Array) -> jax.Array:
+        """Reconstruct images from patches.
+
+        Parameters
+        ----------
+        x : jax.Array
+            Input of shape (N, L, patch_size**2 * C).
+
+        Returns
+        -------
+        jax.Array
+            Images of shape (N, H, W, C) in NHWC format.
+        """
+        p = self.patch_size
+        h = self.obs_shape[0] // p
+        w = self.obs_shape[1] // p
+        assert h * w == x.shape[1], (
+            f"{h * w} != {x.shape[1]}, please check the shape {x.shape} and obs_shape {self.obs_shape}"
+        )
+        return rearrange(x, "n (h w) (p1 p2 c) -> n (h p1) (w p2) c", h=h, w=w, p1=p, p2=p)
+
+    @property
+    def conved_size(self) -> int:
+        """Get the flattened output size."""
+        return self.out_patch_dim * self.get_n_patches(self.in_shape)
+
+    @property
+    def conved_shape(self) -> tuple[int, int]:
+        """Get the output shape after transformer."""
+        return (self.out_patch_dim, self.out_patch_dim)
+
+    def get_n_patches(self, obs_shape: tuple[int, int, int]) -> int:
+        """Get number of patches for a given shape (NHWC: H, W, C)."""
+        return (obs_shape[0] // self.patch_size) * (obs_shape[1] // self.patch_size)
+
+    def get_patch_dim(self, obs_shape: tuple[int, int, int]) -> int:
+        """Get patch dimension for a given shape (NHWC: H, W, C)."""
+        return self.patch_size**2 * obs_shape[2]
+
+    @staticmethod
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ViTConfig) -> tuple[int, int, int]:
+        """Get the required input shape (NHWC: H, W, C)."""
+        return (obs_shape[0], obs_shape[1], cfg.init_channel)
 
 
 class _ViTBlock(nnx.Module):
@@ -390,6 +524,7 @@ class ConvNet(nnx.Module):
         self.attn_layers = nnx.List(attn_layers)
         self.output_spatial_shape = spatial_shape
         self.output_channels = in_channels
+        self.last_channel = in_channels
         self.output_dim = in_channels * int(np.prod(spatial_shape))
 
     def __call__(self, x: jax.Array) -> jax.Array:
