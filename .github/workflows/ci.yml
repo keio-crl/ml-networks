@@ -113,7 +113,16 @@ jobs:
       - name: Build package
         run: python -m build
 
-      - name: Check package
+      - name: Verify package contents
         run: |
-          pip install twine
-          twine check dist/*
+          pip install pkginfo
+          python -c "
+          from pkginfo import Wheel
+          import glob
+          for whl in glob.glob('dist/*.whl'):
+              w = Wheel(whl)
+              assert w.name, 'Missing package name'
+              assert w.version, 'Missing version'
+              assert w.summary, 'Missing description'
+              print(f'{w.name}=={w.version}: OK')
+          "

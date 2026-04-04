@@ -1,13 +1,26 @@
 [project]
-name = "ml_networks"
+name = "ml-networks"
 version = "0.2.0"
-description = "Add your description here"
+description = "A unified deep learning model building library for PyTorch and JAX with shared dataclass-based configuration"
 readme = "README.md"
+license = {text = "MIT"}
 authors = [
     { name = "oakwood-fujiken", email = "oakwood.n14.4sp@keio.jp" },
     { name = "nomutin", email = "nomura0508@icloud.com" }
 ]
 requires-python = ">=3.10"
+keywords = ["deep-learning", "pytorch", "jax", "flax", "neural-networks", "computer-vision", "diffusion-models"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "einops>=0.8.1",
     "kornia>=0.7.3",
@@ -20,6 +33,13 @@ dependencies = [
     "torchgeometry>=0.1.2",
     "torchvision>=0.19.0",
 ]
+
+[project.urls]
+Homepage = "https://keio-crl.github.io/ml-networks/"
+Repository = "https://github.com/keio-crl/ml-networks"
+Documentation = "https://keio-crl.github.io/ml-networks/"
+"Bug Tracker" = "https://github.com/keio-crl/ml-networks/issues"
+Changelog = "https://github.com/keio-crl/ml-networks/releases"
 
 [build-system]
 requires = ["hatchling"]
