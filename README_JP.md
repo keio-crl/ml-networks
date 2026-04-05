@@ -2,6 +2,7 @@
 
 **JP** | **[EN](README.md)**
 
+[![PyPI](https://img.shields.io/pypi/v/ml-networks)](https://pypi.org/project/ml-networks/)
 [![CI](https://github.com/keio-crl/ml-networks/actions/workflows/ci.yml/badge.svg)](https://github.com/keio-crl/ml-networks/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/type--checked-mypy-blue.svg)](https://mypy-lang.org/)
@@ -29,10 +30,10 @@
 
 ```bash
 # PyTorch modules only
-pip install git+https://github.com/keio-crl/ml-networks.git
+pip install ml-networks
 
 # With JAX support (Python 3.11+ required)
-pip install "ml-networks[jax] @ git+https://github.com/keio-crl/ml-networks.git"
+pip install "ml-networks[jax]"
 ```
 
 <details>
@@ -40,12 +41,21 @@ pip install "ml-networks[jax] @ git+https://github.com/keio-crl/ml-networks.git"
 
 ```bash
 # uv
-uv add git+https://github.com/keio-crl/ml-networks.git
-uv add "ml-networks[jax]" --git https://github.com/keio-crl/ml-networks.git  # with JAX
+uv add ml-networks
+uv add "ml-networks[jax]"  # with JAX
 
 # rye
-rye add ml-networks --git https://github.com/keio-crl/ml-networks.git
-rye add "ml-networks[jax]" --git https://github.com/keio-crl/ml-networks.git  # with JAX
+rye add ml-networks
+rye add "ml-networks[jax]"  # with JAX
+```
+
+</details>
+
+<details>
+<summary>開発版 (GitHub から直接インストール)</summary>
+
+```bash
+pip install git+https://github.com/keio-crl/ml-networks.git
 ```
 
 </details>
