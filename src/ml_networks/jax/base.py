@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytorch_lightning as pl
-import torch
 from flax import nnx
 
 
@@ -86,23 +86,23 @@ class JaxLightningModule(pl.LightningModule):
         super().__init__()
         self.automatic_optimization = False
         self._jax_step_count = 0
-        # Dummy parameter so PL's optimizer can increment global_step.
-        # Without this, global_step stays at 0 and ModelCheckpoint
-        # skips all best-model saves (PL dedup check).
-        self._dummy_param = torch.nn.Parameter(torch.zeros(1), requires_grad=False)
 
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        """Dummy optimizer for PL global_step tracking only."""
-        return torch.optim.SGD([self._dummy_param], lr=0.0)
+    def configure_optimizers(self) -> list:
+        """Return empty optimizer list. JAX manages its own optimizers."""
+        return []
 
-    def step_global_step(self) -> None:
-        """Increment PL's global_step via the dummy optimizer.
+    def step_jax(self) -> None:
+        """Increment JAX step counter.
 
         Call this at the end of each training_step so that
-        ModelCheckpoint can correctly save best checkpoints.
+        JaxModelCheckpoint can correctly track progress and save checkpoints.
         """
-        opt = self.optimizers()
-        opt.step()
+        self._jax_step_count += 1
+
+    def step_global_step(self) -> None:
+        """Deprecated: use step_jax() instead."""
+        warnings.warn("step_global_step() is deprecated, use step_jax() instead", DeprecationWarning, stacklevel=2)
+        self.step_jax()
 
     @property
     def jax_step_count(self) -> int:

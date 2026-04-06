@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import logging
 import random
+import warnings
+from copy import deepcopy
 from typing import Any
+from weakref import proxy
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 import pytorch_lightning as pl
+import torch
 from einops import rearrange
 from flax import nnx
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint as _PLModelCheckpoint
 from pytorch_lightning.callbacks.model_summary import ModelSummary as _PLModelSummary
+from torch import Tensor
 
 from ml_networks.config import SoftmaxTransConfig
 
@@ -444,11 +450,58 @@ class JaxModelSummary(_PLModelSummary):
             _log.info("\n" + summary_table)
 
 
-class JaxTrainer(pl.Trainer):
-    """Flax NNX パラメータ数を正しく表示する PyTorch Lightning Trainer ラッパー.
+class JaxModelCheckpoint(_PLModelCheckpoint):
+    """JAX 用 ModelCheckpoint.
 
-    JaxLightningModule を使用するモデルで ``fit()`` を呼び出すと、
-    Flax NNX モデルのパラメータ数が正しく表示される。
+    PL の ModelCheckpoint は ``trainer.global_step`` で重複チェックを行うが、
+    JaxLightningModule では PL の optimizer を使わないため ``global_step`` が進まない。
+    このクラスは ``_jax_step_count`` ベースで保存判定を行い、
+    ダミーパラメータ・ダミーオプティマイザを不要にする。
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._last_jax_step_saved = 0
+
+    def _should_skip_saving_checkpoint(self, trainer: pl.Trainer) -> bool:
+        from pytorch_lightning.trainer.states import TrainerFn
+
+        pl_module = trainer.lightning_module
+        jax_step = getattr(pl_module, "_jax_step_count", trainer.global_step)
+        return (
+            bool(trainer.fast_dev_run)
+            or trainer.state.fn != TrainerFn.FITTING
+            or trainer.sanity_checking
+            or self._last_jax_step_saved == jax_step
+        )
+
+    def _save_checkpoint(self, trainer: pl.Trainer, filepath: str) -> None:
+        trainer.save_checkpoint(filepath, self.save_weights_only)
+        pl_module = trainer.lightning_module
+        self._last_jax_step_saved = getattr(pl_module, "_jax_step_count", trainer.global_step)
+        self._last_global_step_saved = trainer.global_step
+        self._last_checkpoint_saved = filepath
+        if trainer.is_global_zero:
+            for logger in trainer.loggers:
+                logger.after_save_checkpoint(proxy(self))
+
+    def _monitor_candidates(self, trainer: pl.Trainer) -> dict[str, Tensor]:
+        monitor_candidates = deepcopy(trainer.callback_metrics)
+        epoch = monitor_candidates.get("epoch")
+        monitor_candidates["epoch"] = epoch.int() if isinstance(epoch, Tensor) else torch.tensor(trainer.current_epoch)
+        pl_module = trainer.lightning_module
+        jax_step = getattr(pl_module, "_jax_step_count", trainer.global_step)
+        step = monitor_candidates.get("step")
+        monitor_candidates["step"] = step.int() if isinstance(step, Tensor) else torch.tensor(jax_step)
+        return monitor_candidates
+
+
+class JaxTrainer(pl.Trainer):
+    """JAX モデル用 PyTorch Lightning Trainer ラッパー.
+
+    - Flax NNX パラメータ数を正しく表示 (JaxModelSummary)
+    - JAX step ベースの checkpoint 保存 (JaxModelCheckpoint)
+    - PL の ModelCheckpoint が渡された場合は JaxModelCheckpoint に自動変換
 
     Examples
     --------
@@ -466,6 +519,19 @@ class JaxTrainer(pl.Trainer):
             callbacks = [callbacks]
         else:
             callbacks = list(callbacks)
+
+        # ModelCheckpoint が渡された場合にワーニング
+        for cb in callbacks:
+            if isinstance(cb, _PLModelCheckpoint) and not isinstance(cb, JaxModelCheckpoint):
+                warnings.warn(
+                    "JaxLightningModule では ModelCheckpoint の代わりに"
+                    " JaxModelCheckpoint の使用を推奨します。"
+                    " ModelCheckpoint は global_step ベースの重複チェックを行うため、"
+                    "JAX モデルでは checkpoint が正しく保存されない場合があります。",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                break
 
         has_summary = any(isinstance(cb, _PLModelSummary) for cb in callbacks)
         if not has_summary:
