@@ -76,12 +76,28 @@ class NormalStoch:
     def shape(self) -> NormalShape:
         return NormalShape(self.mean.shape, self.std.shape, self.stoch.shape)
 
-    def detach(self) -> NormalStoch:
-        """Stop gradient equivalent."""
+    def stop_gradient(self) -> NormalStoch:
+        """Apply stop_gradient to all members."""
         return NormalStoch(
             jax.lax.stop_gradient(self.mean),
             jax.lax.stop_gradient(self.std),
             jax.lax.stop_gradient(self.stoch),
+        )
+
+    def copy(self) -> NormalStoch:
+        """Return a copy of this distribution state."""
+        return NormalStoch(self.mean.copy(), self.std.copy(), self.stoch.copy())
+
+    def to_numpy(self) -> NormalStoch:
+        """Convert all members to NumPy arrays."""
+        return NormalStoch(np.asarray(self.mean), np.asarray(self.std), np.asarray(self.stoch))  # type: ignore[arg-type]
+
+    def device_put(self, device: jax.Device | None = None) -> NormalStoch:
+        """Place all members on the specified device."""
+        return NormalStoch(
+            jax.device_put(self.mean, device),
+            jax.device_put(self.std, device),
+            jax.device_put(self.stoch, device),
         )
 
     def reshape(self, *shape: int) -> NormalStoch:
@@ -91,13 +107,48 @@ class NormalStoch:
             self.stoch.reshape(*shape),
         )
 
-    def flatten(self, start_dim: int = 0, end_dim: int = -1) -> NormalStoch:
-        """Flatten along specified dimensions."""
+    def flatten(self, start_axis: int = 0, end_axis: int = -1) -> NormalStoch:
+        """Flatten along specified axes."""
         ndim = self.mean.ndim
-        if end_dim < 0:
-            end_dim = ndim + end_dim
-        new_shape = (*self.mean.shape[:start_dim], -1, *self.mean.shape[end_dim + 1 :])
+        if end_axis < 0:
+            end_axis = ndim + end_axis
+        new_shape = (*self.mean.shape[:start_axis], -1, *self.mean.shape[end_axis + 1 :])
         return self.reshape(*new_shape)
+
+    def squeeze(self, axis: int) -> NormalStoch:
+        return NormalStoch(
+            jnp.squeeze(self.mean, axis=axis),
+            jnp.squeeze(self.std, axis=axis),
+            jnp.squeeze(self.stoch, axis=axis),
+        )
+
+    def expand_dims(self, axis: int) -> NormalStoch:
+        return NormalStoch(
+            jnp.expand_dims(self.mean, axis=axis),
+            jnp.expand_dims(self.std, axis=axis),
+            jnp.expand_dims(self.stoch, axis=axis),
+        )
+
+    def transpose(self, *axes: int) -> NormalStoch:
+        return NormalStoch(
+            jnp.transpose(self.mean, axes),
+            jnp.transpose(self.std, axes),
+            jnp.transpose(self.stoch, axes),
+        )
+
+    def swapaxes(self, axis0: int, axis1: int) -> NormalStoch:
+        return NormalStoch(
+            jnp.swapaxes(self.mean, axis0, axis1),
+            jnp.swapaxes(self.std, axis0, axis1),
+            jnp.swapaxes(self.stoch, axis0, axis1),
+        )
+
+    def broadcast(self, shape: tuple[int, ...]) -> NormalStoch:
+        return NormalStoch(
+            jnp.broadcast_to(self.mean, shape),
+            jnp.broadcast_to(self.std, shape),
+            jnp.broadcast_to(self.stoch, shape),
+        )
 
     def save(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
@@ -137,19 +188,28 @@ class CategoricalStoch:
     def __len__(self) -> int:
         return self.stoch.shape[0]
 
-    def squeeze(self, axis: int) -> CategoricalStoch:
-        return CategoricalStoch(
-            jnp.squeeze(self.logits, axis=axis),
-            jnp.squeeze(self.probs, axis=axis),
-            jnp.squeeze(self.stoch, axis=axis),
-        )
-
-    def detach(self) -> CategoricalStoch:
-        """Stop gradient equivalent."""
+    def stop_gradient(self) -> CategoricalStoch:
+        """Apply stop_gradient to all members."""
         return CategoricalStoch(
             jax.lax.stop_gradient(self.logits),
             jax.lax.stop_gradient(self.probs),
             jax.lax.stop_gradient(self.stoch),
+        )
+
+    def copy(self) -> CategoricalStoch:
+        """Return a copy of this distribution state."""
+        return CategoricalStoch(self.logits.copy(), self.probs.copy(), self.stoch.copy())
+
+    def to_numpy(self) -> CategoricalStoch:
+        """Convert all members to NumPy arrays."""
+        return CategoricalStoch(np.asarray(self.logits), np.asarray(self.probs), np.asarray(self.stoch))  # type: ignore[arg-type]
+
+    def device_put(self, device: jax.Device | None = None) -> CategoricalStoch:
+        """Place all members on the specified device."""
+        return CategoricalStoch(
+            jax.device_put(self.logits, device),
+            jax.device_put(self.probs, device),
+            jax.device_put(self.stoch, device),
         )
 
     def reshape(self, *shape: int) -> CategoricalStoch:
@@ -157,6 +217,49 @@ class CategoricalStoch:
             self.logits.reshape(*shape),
             self.probs.reshape(*shape),
             self.stoch.reshape(*shape),
+        )
+
+    def flatten(self, start_axis: int = 0, end_axis: int = -1) -> CategoricalStoch:
+        """Flatten along specified axes."""
+        ndim = self.logits.ndim
+        if end_axis < 0:
+            end_axis = ndim + end_axis
+        new_shape = (*self.logits.shape[:start_axis], -1, *self.logits.shape[end_axis + 1 :])
+        return self.reshape(*new_shape)
+
+    def squeeze(self, axis: int) -> CategoricalStoch:
+        return CategoricalStoch(
+            jnp.squeeze(self.logits, axis=axis),
+            jnp.squeeze(self.probs, axis=axis),
+            jnp.squeeze(self.stoch, axis=axis),
+        )
+
+    def expand_dims(self, axis: int) -> CategoricalStoch:
+        return CategoricalStoch(
+            jnp.expand_dims(self.logits, axis=axis),
+            jnp.expand_dims(self.probs, axis=axis),
+            jnp.expand_dims(self.stoch, axis=axis),
+        )
+
+    def transpose(self, *axes: int) -> CategoricalStoch:
+        return CategoricalStoch(
+            jnp.transpose(self.logits, axes),
+            jnp.transpose(self.probs, axes),
+            jnp.transpose(self.stoch, axes),
+        )
+
+    def swapaxes(self, axis0: int, axis1: int) -> CategoricalStoch:
+        return CategoricalStoch(
+            jnp.swapaxes(self.logits, axis0, axis1),
+            jnp.swapaxes(self.probs, axis0, axis1),
+            jnp.swapaxes(self.stoch, axis0, axis1),
+        )
+
+    def broadcast(self, shape: tuple[int, ...]) -> CategoricalStoch:
+        return CategoricalStoch(
+            jnp.broadcast_to(self.logits, shape),
+            jnp.broadcast_to(self.probs, shape),
+            jnp.broadcast_to(self.stoch, shape),
         )
 
     @property
@@ -208,19 +311,28 @@ class BernoulliStoch:
     def shape(self) -> BernoulliShape:
         return BernoulliShape(self.logits.shape, self.probs.shape, self.stoch.shape)
 
-    def squeeze(self, axis: int) -> BernoulliStoch:
-        return BernoulliStoch(
-            jnp.squeeze(self.logits, axis=axis),
-            jnp.squeeze(self.probs, axis=axis),
-            jnp.squeeze(self.stoch, axis=axis),
-        )
-
-    def detach(self) -> BernoulliStoch:
-        """Stop gradient equivalent."""
+    def stop_gradient(self) -> BernoulliStoch:
+        """Apply stop_gradient to all members."""
         return BernoulliStoch(
             jax.lax.stop_gradient(self.logits),
             jax.lax.stop_gradient(self.probs),
             jax.lax.stop_gradient(self.stoch),
+        )
+
+    def copy(self) -> BernoulliStoch:
+        """Return a copy of this distribution state."""
+        return BernoulliStoch(self.logits.copy(), self.probs.copy(), self.stoch.copy())
+
+    def to_numpy(self) -> BernoulliStoch:
+        """Convert all members to NumPy arrays."""
+        return BernoulliStoch(np.asarray(self.logits), np.asarray(self.probs), np.asarray(self.stoch))  # type: ignore[arg-type]
+
+    def device_put(self, device: jax.Device | None = None) -> BernoulliStoch:
+        """Place all members on the specified device."""
+        return BernoulliStoch(
+            jax.device_put(self.logits, device),
+            jax.device_put(self.probs, device),
+            jax.device_put(self.stoch, device),
         )
 
     def reshape(self, *shape: int) -> BernoulliStoch:
@@ -228,6 +340,49 @@ class BernoulliStoch:
             self.logits.reshape(*shape),
             self.probs.reshape(*shape),
             self.stoch.reshape(*shape),
+        )
+
+    def flatten(self, start_axis: int = 0, end_axis: int = -1) -> BernoulliStoch:
+        """Flatten along specified axes."""
+        ndim = self.logits.ndim
+        if end_axis < 0:
+            end_axis = ndim + end_axis
+        new_shape = (*self.logits.shape[:start_axis], -1, *self.logits.shape[end_axis + 1 :])
+        return self.reshape(*new_shape)
+
+    def squeeze(self, axis: int) -> BernoulliStoch:
+        return BernoulliStoch(
+            jnp.squeeze(self.logits, axis=axis),
+            jnp.squeeze(self.probs, axis=axis),
+            jnp.squeeze(self.stoch, axis=axis),
+        )
+
+    def expand_dims(self, axis: int) -> BernoulliStoch:
+        return BernoulliStoch(
+            jnp.expand_dims(self.logits, axis=axis),
+            jnp.expand_dims(self.probs, axis=axis),
+            jnp.expand_dims(self.stoch, axis=axis),
+        )
+
+    def transpose(self, *axes: int) -> BernoulliStoch:
+        return BernoulliStoch(
+            jnp.transpose(self.logits, axes),
+            jnp.transpose(self.probs, axes),
+            jnp.transpose(self.stoch, axes),
+        )
+
+    def swapaxes(self, axis0: int, axis1: int) -> BernoulliStoch:
+        return BernoulliStoch(
+            jnp.swapaxes(self.logits, axis0, axis1),
+            jnp.swapaxes(self.probs, axis0, axis1),
+            jnp.swapaxes(self.stoch, axis0, axis1),
+        )
+
+    def broadcast(self, shape: tuple[int, ...]) -> BernoulliStoch:
+        return BernoulliStoch(
+            jnp.broadcast_to(self.logits, shape),
+            jnp.broadcast_to(self.probs, shape),
+            jnp.broadcast_to(self.stoch, shape),
         )
 
     def save(self, path: str) -> None:
