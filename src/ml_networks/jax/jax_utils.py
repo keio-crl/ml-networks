@@ -106,12 +106,8 @@ def softmax(
     ValueError
         If the softmax is inf or nan.
     """
-    x = inputs / temperature
-    x = jnp.exp(jax.nn.log_softmax(x, axis=axis))
-    if jnp.isinf(x).any() or jnp.isnan(x).any():
-        msg = "softmax is inf or nan"
-        raise ValueError(msg)
-    return x
+    x = inputs / temperature 
+    return jnp.exp(jax.nn.log_softmax(x, axis=axis))
 
 
 def gumbel_softmax(
@@ -155,12 +151,7 @@ def gumbel_softmax(
     index = jnp.argmax(y_soft, axis=axis)
     y_hard = jax.nn.one_hot(index, y_soft.shape[axis])
     # Straight-through estimator
-    result = y_hard + y_soft - jax.lax.stop_gradient(y_soft)
-
-    if jnp.isinf(result).any() or jnp.isnan(result).any():
-        msg = "gumbel_softmax is inf or nan"
-        raise ValueError(msg)
-    return result
+    return y_hard + y_soft - jax.lax.stop_gradient(y_soft)
 
 
 def jax_fix_seed(seed: int = 42) -> jax.Array:
