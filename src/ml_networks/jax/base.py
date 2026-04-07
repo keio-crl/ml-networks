@@ -72,7 +72,7 @@ class BaseModule(nnx.Module):
         nnx.update(self, state)
 
 
-class JaxLightningModule(pl.LightningModule):
+class JaxLightningModule(pl.LightningModule, nnx.Module):
     """Base class for JAX models trained with PyTorch Lightning.
 
     Subclasses should:
