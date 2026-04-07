@@ -250,12 +250,12 @@ def kl_balancing(posterior: StochState, prior: StochState, weight: float = 0.8) 
         The KL balancing loss.
     """
     assert 0 <= weight <= 1, "weight should be in the range [0, 1]"
-    kld_prior = weight * posterior.detach().get_distribution().kl_divergence(
+    kld_prior = weight * posterior.stop_gradient().get_distribution().kl_divergence(
         prior.get_distribution(),
     )
 
     kld_posterior = (1 - weight) * posterior.get_distribution().kl_divergence(
-        prior.detach().get_distribution(),
+        prior.stop_gradient().get_distribution(),
     )
 
     return kld_prior + kld_posterior

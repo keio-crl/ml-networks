@@ -1,5 +1,5 @@
 from .activations import Activation, CRReLU, REReLU, SiGLU, TanhExp
-from .base import BaseModule
+from .base import BaseModule, JaxLightningModule
 from .contrastive import ContrastiveLearningLoss
 from .distributions import (
     BernoulliStoch,
@@ -14,6 +14,7 @@ from .distributions import (
 )
 from .hypernetworks import HyperNet
 from .jax_utils import (
+    JaxModelCheckpoint,
     JaxModelSummary,
     JaxTrainer,
     MinMaxNormalize,
@@ -67,6 +68,8 @@ __all__ = [
     "Encoder",
     "FocalFrequencyLoss",
     "HyperNet",
+    "JaxLightningModule",
+    "JaxModelCheckpoint",
     "JaxModelSummary",
     "JaxTrainer",
     "LinearNormActivation",
