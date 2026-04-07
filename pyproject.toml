@@ -1,6 +1,6 @@
 [project]
 name = "ml-networks"
-version = "0.2.3"
+version = "0.2.4"
 description = "A unified deep learning model building library for PyTorch and JAX with shared dataclass-based configuration"
 readme = "README.md"
 license = {text = "MIT"}
