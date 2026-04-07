@@ -397,6 +397,24 @@ class BernoulliStoch:
 
 StochState = NormalStoch | CategoricalStoch | BernoulliStoch
 
+# Register as JAX pytree nodes so that StochState objects can be used
+# with jax.jit, jax.vmap, jax.tree.map, etc.
+jax.tree_util.register_dataclass(
+    NormalStoch,
+    data_fields=["mean", "std", "stoch"],
+    meta_fields=[],
+)
+jax.tree_util.register_dataclass(
+    CategoricalStoch,
+    data_fields=["logits", "probs", "stoch"],
+    meta_fields=[],
+)
+jax.tree_util.register_dataclass(
+    BernoulliStoch,
+    data_fields=["logits", "probs", "stoch"],
+    meta_fields=[],
+)
+
 
 def cat_dist(stochs: tuple[StochState, ...], axis: int = -1) -> StochState | None:
     """
@@ -572,7 +590,13 @@ class Distribution(nnx.Module):
         if spherical:
             self.codebook = BSQCodebook(self.n_class)
 
-    def normal(self, mu_std: jax.Array, deterministic: bool = False, inv_tmp: float = 1.0) -> NormalStoch:
+    def normal(
+        self,
+        mu_std: jax.Array,
+        deterministic: bool = False,
+        inv_tmp: float = 1.0,
+        key: jax.Array | None = None,
+    ) -> NormalStoch:
         assert mu_std.shape[-1] == self.in_dim * 2, (
             f"mu_std.shape[-1] {mu_std.shape[-1]} and in_dim {self.in_dim} must be the same."
         )
@@ -583,18 +607,26 @@ class Distribution(nnx.Module):
         if deterministic:
             sample = mu
         else:
-            key = self.rngs()
+            if key is None:
+                key = self.rngs()
             sample = mu + std * jax.random.normal(key, mu.shape)
 
         return NormalStoch(mu, std, sample)
 
-    def categorical(self, logits: jax.Array, deterministic: bool = False, inv_tmp: float = 1.0) -> CategoricalStoch:
+    def categorical(
+        self,
+        logits: jax.Array,
+        deterministic: bool = False,
+        inv_tmp: float = 1.0,
+        key: jax.Array | None = None,
+    ) -> CategoricalStoch:
         batch_shape = logits.shape[:-1]
         logits_chunks = jnp.split(logits, self.n_groups, axis=-1)
         logits_stacked = jnp.stack(logits_chunks, axis=-2)
         probs = softmax(logits_stacked, axis=-1, temperature=1 / inv_tmp)
 
-        key = self.rngs()
+        if key is None:
+            key = self.rngs()
         # Sample using Gumbel-max trick for one-hot with straight-through
         gumbel_noise = -jnp.log(-jnp.log(jax.random.uniform(key, probs.shape, minval=1e-10, maxval=1.0)))
         y = jnp.log(probs + 1e-10) + gumbel_noise
@@ -611,14 +643,21 @@ class Distribution(nnx.Module):
 
         return CategoricalStoch(logits_stacked, probs, stoch)
 
-    def bernoulli(self, logits: jax.Array, deterministic: bool = False, inv_tmp: float = 1.0) -> BernoulliStoch:
+    def bernoulli(
+        self,
+        logits: jax.Array,
+        deterministic: bool = False,
+        inv_tmp: float = 1.0,
+        key: jax.Array | None = None,
+    ) -> BernoulliStoch:
         batch_shape = logits.shape[:-1]
         chunked_logits = jnp.split(logits, self.n_groups, axis=-1)
         logits_stacked = jnp.stack(chunked_logits, axis=-2)
         logits_stacked = logits_stacked * inv_tmp
         probs = jax.nn.sigmoid(logits_stacked)
 
-        key = self.rngs()
+        if key is None:
+            key = self.rngs()
         # Bernoulli sampling with straight-through
         u = jax.random.uniform(key, probs.shape)
         sample = (u < probs).astype(jnp.float32)
@@ -646,6 +685,7 @@ class Distribution(nnx.Module):
         x: jax.Array,
         deterministic: bool = False,
         inv_tmp: float = 1.0,
+        key: jax.Array | None = None,
     ) -> StochState:
         """
         Compute the posterior distribution.
@@ -658,6 +698,10 @@ class Distribution(nnx.Module):
             Whether to use the deterministic mode. Default is False.
         inv_tmp : float, optional
             Inverse temperature. Default is 1.0.
+        key : jax.Array | None, optional
+            PRNG key. If provided, ``self.rngs()`` is not called, making this
+            method safe for use inside ``jax.lax.scan`` and other JAX transforms
+            that forbid NNX variable mutation. Default is None.
 
         Returns
         -------
@@ -665,11 +709,11 @@ class Distribution(nnx.Module):
             Posterior distribution.
         """
         if self.dist_type == "normal":
-            return self.normal(x, deterministic=deterministic, inv_tmp=inv_tmp)
+            return self.normal(x, deterministic=deterministic, inv_tmp=inv_tmp, key=key)
         if self.dist_type == "categorical":
-            return self.categorical(x, deterministic=deterministic, inv_tmp=inv_tmp)
+            return self.categorical(x, deterministic=deterministic, inv_tmp=inv_tmp, key=key)
         if self.dist_type == "bernoulli":
-            return self.bernoulli(x, deterministic=deterministic, inv_tmp=inv_tmp)
+            return self.bernoulli(x, deterministic=deterministic, inv_tmp=inv_tmp, key=key)
         raise NotImplementedError
 
     def deterministic_onehot(self, input: jax.Array) -> jax.Array:
