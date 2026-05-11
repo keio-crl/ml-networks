@@ -63,12 +63,13 @@ def get_optimizer(
     **kwargs: Any,
 ) -> optax.GradientTransformation:
     """
-    Get optimizer from optax.
+    Get optimizer from optax or optax.contrib.
 
     Parameters
     ----------
     name : str
         Optimizer name (e.g. "adam", "sgd", "adamw", "lamb", "rmsprop").
+        Names in optax.contrib are also supported.
     kwargs : dict
         Optimizer arguments (e.g. learning_rate=0.01).
 
@@ -100,8 +101,10 @@ def get_optimizer(
 
     if hasattr(optax, optax_name):
         optimizer_fn = getattr(optax, optax_name)
+    elif hasattr(optax.contrib, optax_name):
+        optimizer_fn = getattr(optax.contrib, optax_name)
     else:
-        msg = f"Optimizer {name} is not implemented in optax. "
+        msg = f"Optimizer {name} is not implemented in optax or optax.contrib. "
         msg += "Please check the name."
         raise NotImplementedError(msg)
     return optimizer_fn(**mapped_kwargs)

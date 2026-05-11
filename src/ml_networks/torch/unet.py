@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from itertools import pairwise
-from typing import Any, cast
+from typing import Any, Iterable, Iterator, Tuple, TypeVar, cast
 
 import torch
 import torch.func as tf
@@ -21,7 +20,21 @@ from ml_networks.torch.layers import (
     HorizonUnShuffle,
 )
 
-DownBlock = tuple[nn.Module, nn.Module, nn.Module, nn.Module]
+_T = TypeVar("_T")
+
+try:
+    from itertools import pairwise  # type: ignore[attr-defined]  # Python 3.10+
+except ImportError:
+    from itertools import tee
+
+    def pairwise(iterable: Iterable[_T]) -> Iterator[tuple[_T, _T]]:  # type: ignore[no-redef]
+        """Backport of itertools.pairwise for Python < 3.10."""
+        a, b = tee(iterable)
+        next(b, None)
+        return zip(a, b)
+
+
+DownBlock = Tuple[nn.Module, nn.Module, nn.Module, nn.Module]
 
 
 class ConditionalUnet2d(nn.Module):

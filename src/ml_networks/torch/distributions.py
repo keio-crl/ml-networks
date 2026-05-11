@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 import torch
 import torch.distributions as D  # pylint: disable=import-self
@@ -577,7 +577,7 @@ class BernoulliStoch:
         return D.Independent(BernoulliStraightThrough(self.probs), independent)
 
 
-StochState = NormalStoch | CategoricalStoch | BernoulliStoch
+StochState = Union[NormalStoch, CategoricalStoch, BernoulliStoch]
 
 
 def cat_dist(stochs: tuple[StochState, ...], dim: int = -1) -> StochState | None:
