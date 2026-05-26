@@ -21,6 +21,7 @@ from ml_networks.config import (
     SpatialSoftmaxConfig,
     ViTConfig,
 )
+from ml_networks.jax.activations import Activation
 from ml_networks.jax.layers import (
     Attention2d,
     ConvNormActivation,
@@ -29,10 +30,8 @@ from ml_networks.jax.layers import (
     LinearNormActivation,
     MLPLayer,
     PatchEmbed,
-    PositionalEncoding,
     ResidualBlock,
     SpatialSoftmax,
-    TransformerLayer,
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape
 
@@ -68,14 +67,31 @@ class Encoder(nnx.Module):
     ) -> None:
         self.obs_shape = obs_shape
         self.feature_dim = feature_dim
+        self._is_vit = isinstance(backbone_cfg, ViTConfig)
 
         self.encoder: nnx.Module
+        self.fc: nnx.Module
         if isinstance(backbone_cfg, ViTConfig):
             self.encoder = ViT(obs_shape, backbone_cfg, rngs=rngs)
-            self.last_channel: int = self.encoder.last_channel
-            self.conved_size: int = cast("int", self.encoder.conved_size)
-            self.conved_shape: tuple[int, ...] = cast("tuple[int, ...]", self.encoder.conved_shape)
-        elif isinstance(backbone_cfg, ConvNetConfig):
+            d_model = backbone_cfg.transformer_cfg.d_model
+            self.last_channel: int = d_model
+            self.conved_size: int = d_model
+            self.conved_shape: tuple[int, ...] = (1, 1)
+            assert isinstance(feature_dim, int), "feature_dim must be int when using ViTConfig backbone"
+            if isinstance(fc_cfg, MLPConfig):
+                self.fc = MLPLayer(d_model, feature_dim, fc_cfg, rngs=rngs)
+            elif isinstance(fc_cfg, LinearConfig):
+                self.fc = LinearNormActivation(d_model, feature_dim, fc_cfg, rngs=rngs)
+            elif fc_cfg is None:
+                assert d_model == feature_dim, (
+                    f"feature_dim must equal transformer d_model when fc_cfg is None, got {feature_dim} vs {d_model}"
+                )
+                self.fc = Identity()
+            else:
+                msg = f"fc_cfg type {type(fc_cfg)} is not supported with ViTConfig backbone"
+                raise NotImplementedError(msg)
+            return
+        if isinstance(backbone_cfg, ConvNetConfig):
             self.encoder = ConvNet(obs_shape, backbone_cfg, rngs=rngs)
             self.last_channel = self.encoder.last_channel
             self.conved_size = cast("int", self.encoder.conved_size)
@@ -96,7 +112,6 @@ class Encoder(nnx.Module):
                 f"{feature_dim} != {(self.last_channel, *self.conved_shape)}"
             )
 
-        self.fc: nnx.Module
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int)
             self.fc = MLPLayer(self.conved_size, feature_dim, fc_cfg, rngs=rngs)
@@ -153,6 +168,10 @@ class Encoder(nnx.Module):
         batch_shape = x.shape[:-3]
         x = x.reshape(-1, *self.obs_shape)
         x = self.encoder(x)
+        if self._is_vit:
+            # ViT encoder returns the CLS token (B, d_model); fc projects to feature_dim.
+            x = self.fc(x)
+            return x.reshape(*batch_shape, *x.shape[1:])
         if isinstance(self._fc_cfg, AdaptiveAveragePoolingConfig):
             # NHWC adaptive average pooling: (B, H, W, C) -> (B, oh, ow, C)
             pool_size = self._adaptive_pool_output_size
@@ -205,30 +224,57 @@ class Decoder(nnx.Module):
     ) -> None:
         self.obs_shape = obs_shape
         self.feature_dim = feature_dim
+        self._is_vit = isinstance(backbone_cfg, ViTConfig)
+        self.fc: nnx.Module
+        self.input_shape: tuple[int, ...]
+        self.decoder: nnx.Module
 
-        self.input_shape: tuple[int, int, int]
         if isinstance(backbone_cfg, ViTConfig):
-            self.input_shape = ViT.get_input_shape(obs_shape, backbone_cfg)
-        elif isinstance(backbone_cfg, ConvNetConfig):
-            self.input_shape = cast(
+            d_model = backbone_cfg.transformer_cfg.d_model
+            assert isinstance(feature_dim, int), "feature_dim must be int when using ViTConfig backbone"
+            if isinstance(fc_cfg, MLPConfig):
+                self.fc = MLPLayer(feature_dim, d_model, fc_cfg, rngs=rngs)
+            elif isinstance(fc_cfg, LinearConfig):
+                self.fc = LinearNormActivation(feature_dim, d_model, fc_cfg, rngs=rngs)
+            elif fc_cfg is None:
+                assert feature_dim == d_model, (
+                    f"feature_dim must equal transformer d_model when fc_cfg is None, got {feature_dim} vs {d_model}"
+                )
+                self.fc = Identity()
+            else:
+                msg = f"fc_cfg type {type(fc_cfg)} is not supported with ViTConfig backbone"
+                raise NotImplementedError(msg)
+            self.input_shape = (d_model,)
+            self.has_fc = True
+            self.decoder = ViT(
+                in_shape=(d_model,),
+                cfg=backbone_cfg,
+                obs_shape=obs_shape,
+                rngs=rngs,
+            )
+            return
+
+        in_shape3: tuple[int, int, int]
+        if isinstance(backbone_cfg, ConvNetConfig):
+            in_shape3 = cast(
                 "tuple[int, int, int]",
                 ConvTranspose.get_input_shape(obs_shape, backbone_cfg),
             )
         elif isinstance(backbone_cfg, ResNetConfig):
-            self.input_shape = ResNetPixShuffle.get_input_shape(obs_shape, backbone_cfg)
+            in_shape3 = ResNetPixShuffle.get_input_shape(obs_shape, backbone_cfg)
         else:
             msg = f"{type(backbone_cfg)} is not implemented"
             raise NotImplementedError(msg)
+        self.input_shape = in_shape3
 
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is int"
             self.has_fc = True
         else:
-            assert feature_dim == self.input_shape, f"{feature_dim} != {self.input_shape}"
+            assert feature_dim == in_shape3, f"{feature_dim} != {in_shape3}"
             self.has_fc = False
 
-        input_size = int(np.prod(self.input_shape))
-        self.fc: nnx.Module
+        input_size = int(np.prod(in_shape3))
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int)
             self.fc = MLPLayer(feature_dim, input_size, fc_cfg, rngs=rngs)
@@ -238,23 +284,16 @@ class Decoder(nnx.Module):
         else:
             self.fc = Identity()
 
-        if isinstance(backbone_cfg, ViTConfig):
-            self.decoder: nnx.Module = ViT(
-                in_shape=self.input_shape,
-                cfg=backbone_cfg,
-                obs_shape=obs_shape,
-                rngs=rngs,
-            )
-        elif isinstance(backbone_cfg, ConvNetConfig):
+        if isinstance(backbone_cfg, ConvNetConfig):
             self.decoder = ConvTranspose(
-                in_shape=self.input_shape,
+                in_shape=in_shape3,
                 obs_shape=obs_shape,
                 cfg=backbone_cfg,
                 rngs=rngs,
             )
         elif isinstance(backbone_cfg, ResNetConfig):
             self.decoder = ResNetPixShuffle(
-                in_shape=self.input_shape,
+                in_shape=in_shape3,
                 obs_shape=obs_shape,
                 cfg=backbone_cfg,
                 rngs=rngs,
@@ -274,6 +313,12 @@ class Decoder(nnx.Module):
         jax.Array
             Decoded tensor of shape (*, H, W, C) in NHWC format.
         """
+        if self._is_vit:
+            batch_shape, data_shape = x.shape[:-1], x.shape[-1:]
+            x = x.reshape(-1, *data_shape)
+            x = self.fc(x)  # (B, d_model)
+            x = self.decoder(x)  # (B, H, W, C)
+            return x.reshape(*batch_shape, *self.obs_shape)
         if self.has_fc:
             batch_shape, data_shape = x.shape[:-1], x.shape[-1:]
         else:
@@ -285,25 +330,130 @@ class Decoder(nnx.Module):
         return x.reshape(*batch_shape, *self.obs_shape)
 
 
+class _ViTEncoderBlock(nnx.Module):
+    """ViT encoder block (pre-norm). Positional embedding is added to query and key only.
+
+    Follows the DETR convention (https://github.com/gokul-pv/DetectionTransformer): at every
+    layer the spatial positional embedding is added to the query and key tensors of the
+    self-attention, while the value tensor is left unmodified.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        nhead: int,
+        dim_ff: int,
+        dropout: float,
+        activation: str,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.norm1 = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.attn = nnx.MultiHeadAttention(
+            num_heads=nhead,
+            in_features=d_model,
+            dropout_rate=dropout,
+            decode=False,
+            rngs=rngs,
+        )
+        self.norm2 = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.linear1 = nnx.Linear(d_model, dim_ff, rngs=rngs)
+        self.activation = Activation(activation)
+        self.linear2 = nnx.Linear(dim_ff, d_model, rngs=rngs)
+        self.dropout: nnx.Module = nnx.Dropout(rate=dropout, rngs=rngs) if dropout > 0 else Identity()
+
+    def __call__(self, x: jax.Array, pos: jax.Array) -> jax.Array:
+        h = self.norm1(x)
+        q = h + pos
+        k = h + pos
+        v = h
+        attn_out = self.attn(q, k, v)
+        x = x + self.dropout(attn_out)
+        h = self.norm2(x)
+        h = self.linear1(h)
+        h = self.activation(h)
+        h = self.dropout(h)
+        h = self.linear2(h)
+        return x + self.dropout(h)
+
+
+class _ViTDecoderBlock(nnx.Module):
+    """ViT decoder block: cross-attention from learnable queries to the projected CLS token.
+
+    Pre-norm cross-attention where the queries are the learnable patch tokens and the
+    key/value come from the projected CLS representation, followed by a residual MLP block.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        nhead: int,
+        dim_ff: int,
+        dropout: float,
+        activation: str,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.norm_q = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.norm_kv = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.cross_attn = nnx.MultiHeadAttention(
+            num_heads=nhead,
+            in_features=d_model,
+            dropout_rate=dropout,
+            decode=False,
+            rngs=rngs,
+        )
+        self.norm_mlp = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.linear1 = nnx.Linear(d_model, dim_ff, rngs=rngs)
+        self.activation = Activation(activation)
+        self.linear2 = nnx.Linear(dim_ff, d_model, rngs=rngs)
+        self.dropout: nnx.Module = nnx.Dropout(rate=dropout, rngs=rngs) if dropout > 0 else Identity()
+
+    def __call__(self, queries: jax.Array, memory: jax.Array) -> jax.Array:
+        q = self.norm_q(queries)
+        kv = self.norm_kv(memory)
+        attn_out = self.cross_attn(q, kv, kv)
+        queries = queries + self.dropout(attn_out)
+        h = self.norm_mlp(queries)
+        h = self.linear1(h)
+        h = self.activation(h)
+        h = self.linear2(h)
+        return queries + self.dropout(h)
+
+
 class ViT(nnx.Module):
     """
     Vision Transformer for Encoder and Decoder (NHWC format).
 
+    The encoder mode (``obs_shape is None``) follows the DETR convention: a learnable per-patch
+    positional embedding is added to the query and key tensors of every self-attention layer
+    (rather than being added once at the input). When ``cfg.cls_token`` is True, a CLS token
+    with its own learnable positional embedding is prepended and the forward pass returns the
+    CLS token of shape ``(B, d_model)``.
+
+    The decoder mode (``obs_shape is not None``) takes a CLS token of shape ``(B, d_model)`` or
+    ``(B, 1, d_model)`` and reconstructs an image. The CLS token is projected to a hidden
+    dimension and used as the key/value of cross-attention. A fixed set of
+    ``P = (H // p) * (W // p)`` learnable query tokens interacts with this representation
+    through several cross-attention layers with residual MLP blocks. Each query is then
+    linearly projected to ``p * p * C`` pixels and rearranged into a ``(B, H, W, C)`` image.
+
     Parameters
     ----------
-    in_shape : tuple[int, int, int]
-        Input shape in (H, W, C) format.
+    in_shape : tuple[int, ...]
+        Encoder mode: image shape ``(H, W, C)`` (NHWC). Decoder mode: ``(d_model,)`` — the CLS
+        token is the input.
     cfg : ViTConfig
         ViT configuration.
     obs_shape : tuple[int, int, int] | None
-        Output shape in (H, W, C) format. If None, acts as encoder.
+        Output shape in (H, W, C) format. If ``None``, acts as encoder.
     rngs : nnx.Rngs
         Random number generators.
     """
 
     def __init__(
         self,
-        in_shape: tuple[int, int, int],
+        in_shape: tuple[int, ...],
         cfg: ViTConfig,
         obs_shape: tuple[int, int, int] | None = None,
         *,
@@ -311,38 +461,87 @@ class ViT(nnx.Module):
     ) -> None:
         self.cfg = cfg
         self.in_shape = in_shape
-        self.obs_shape = obs_shape if obs_shape is not None else in_shape
         self.patch_size = cfg.patch_size
+        self.transformer_cfg = cfg.transformer_cfg
+        self.is_encoder = obs_shape is None
+        self.obs_shape: tuple[int, int, int] = (
+            obs_shape if obs_shape is not None else cast("tuple[int, int, int]", in_shape)
+        )
 
-        t_cfg = cfg.transformer_cfg
-        self.transformer_cfg = t_cfg
-        # NHWC: (H, W, C) -> patch_dim = patch_size^2 * C
-        self.in_patch_dim = self.get_patch_dim(in_shape)
-        self.out_patch_dim = self.get_patch_dim(obs_shape) if obs_shape is not None else t_cfg.d_model
+        d_model = self.transformer_cfg.d_model
+        self.d_model = d_model
 
-        self.positional_encoding = PositionalEncoding(
-            self.in_patch_dim,
-            t_cfg.dropout,
-            max_len=self.get_n_patches(in_shape),
+        if self.is_encoder:
+            self._build_encoder(rngs=rngs)
+            self.last_channel = d_model
+            self.out_patch_dim = d_model
+        else:
+            self._build_decoder(rngs=rngs)
+            self.out_patch_dim = self.patch_size**2 * self.obs_shape[2]
+            self.last_channel = self.out_patch_dim
+        self.output_dim = self.last_channel
+
+    def _build_encoder(self, *, rngs: nnx.Rngs) -> None:
+        cfg = self.cfg
+        t_cfg = self.transformer_cfg
+        d_model = self.d_model
+        assert len(self.in_shape) == 3, "Encoder mode requires in_shape=(H, W, C)"
+        in_shape3 = cast("tuple[int, int, int]", self.in_shape)
+        n_patches = self.get_n_patches(in_shape3)
+
+        self.patch_embed = PatchEmbed(
+            emb_dim=d_model,
+            patch_size=self.patch_size,
+            obs_shape=in_shape3,
             rngs=rngs,
         )
-        self.vit = TransformerLayer(self.in_patch_dim, self.out_patch_dim, t_cfg, rngs=rngs)
+        # Learnable positional embedding added to query and key at every encoder layer.
+        self._pos_emb = nnx.Param(jax.random.normal(rngs(), (1, n_patches, d_model)) * 0.02)
 
-        self.is_encoder = obs_shape is None
-        if self.is_encoder:
-            self.n_patches = self.get_n_patches(in_shape)
-            self.patch_embed = PatchEmbed(
-                emb_dim=self.in_patch_dim,
-                patch_size=self.patch_size,
-                obs_shape=in_shape,
+        if cfg.cls_token:
+            self._cls_token = nnx.Param(jax.random.normal(rngs(), (1, 1, d_model)) * 0.02)
+            self._cls_pos_emb = nnx.Param(jax.random.normal(rngs(), (1, 1, d_model)) * 0.02)
+
+        self.encoder_blocks = [
+            _ViTEncoderBlock(
+                d_model=d_model,
+                nhead=t_cfg.nhead,
+                dim_ff=t_cfg.dim_ff,
+                dropout=t_cfg.dropout,
+                activation=t_cfg.hidden_activation,
                 rngs=rngs,
             )
+            for _ in range(t_cfg.n_layers)
+        ]
+        self.encoder_norm = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.n_patches = n_patches
 
-        self.should_unpatchify = cfg.unpatchify
-        if cfg.cls_token:
-            self._cls_token = nnx.Param(jax.random.normal(rngs(), (1, 1, self.in_patch_dim)) * 0.02)
-        self.last_channel = self.get_n_patches(in_shape)
-        self.output_dim = self.out_patch_dim
+    def _build_decoder(self, *, rngs: nnx.Rngs) -> None:
+        t_cfg = self.transformer_cfg
+        d_model = self.d_model
+        n_patches = self.get_n_patches(self.obs_shape)
+
+        # Learnable patch queries (1, P, d_model). One query per output patch.
+        self._queries = nnx.Param(jax.random.normal(rngs(), (1, n_patches, d_model)) * 0.02)
+        # Project the CLS token to the hidden dimension used as K/V in cross-attention.
+        self.kv_norm = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        self.kv_proj = nnx.Linear(d_model, d_model, rngs=rngs)
+
+        self.decoder_blocks = [
+            _ViTDecoderBlock(
+                d_model=d_model,
+                nhead=t_cfg.nhead,
+                dim_ff=t_cfg.dim_ff,
+                dropout=t_cfg.dropout,
+                activation=t_cfg.hidden_activation,
+                rngs=rngs,
+            )
+            for _ in range(t_cfg.n_layers)
+        ]
+        self.decoder_norm = nnx.LayerNorm(num_features=d_model, rngs=rngs)
+        out_patch_dim = self.patch_size**2 * self.obs_shape[2]
+        self.out_proj = nnx.Linear(d_model, out_patch_dim, rngs=rngs)
+        self.n_patches = n_patches
 
     def __call__(self, x: jax.Array, *, return_cls_token: bool = False) -> jax.Array:
         """
@@ -351,59 +550,58 @@ class ViT(nnx.Module):
         Parameters
         ----------
         x : jax.Array
-            Input tensor of shape (B, H, W, C) in NHWC format.
+            Encoder mode: image tensor of shape ``(B, H, W, C)`` in NHWC format.
+            Decoder mode: CLS token of shape ``(B, d_model)`` or ``(B, 1, d_model)``.
         return_cls_token : bool
-            Whether to return CLS token only. Default is False.
+            Retained for backward compatibility; the encoder always returns the CLS token.
 
         Returns
         -------
         jax.Array
-            Output tensor.
+            Encoder mode: CLS token of shape ``(B, d_model)``.
+            Decoder mode: reconstructed image of shape ``(B, H, W, C)``.
         """
-        x = self.patch_embed(x) if self.is_encoder else self.patchify(x)
-        x = self.positional_encoding(x)
+        del return_cls_token
+        if self.is_encoder:
+            return self._forward_encoder(x)
+        return self._forward_decoder(x)
+
+    def _forward_encoder(self, x: jax.Array) -> jax.Array:
+        x = self.patch_embed(x)  # (B, N, d_model)
+        pos = jnp.broadcast_to(self._pos_emb.value, (x.shape[0], x.shape[1], x.shape[2]))
         if hasattr(self, "_cls_token"):
             cls_token = jnp.broadcast_to(self._cls_token.value, (x.shape[0], 1, x.shape[-1]))
+            cls_pos = jnp.broadcast_to(self._cls_pos_emb.value, (x.shape[0], 1, x.shape[-1]))
             x = jnp.concatenate([cls_token, x], axis=1)
-        x = self.vit(x)
+            pos = jnp.concatenate([cls_pos, pos], axis=1)
+        for block in self.encoder_blocks:
+            x = block(x, pos)
+        x = self.encoder_norm(x)
         if hasattr(self, "_cls_token"):
-            cls_token = x[:, 0]
-            x = x[:, 1:]
-        if self.should_unpatchify:
-            x = self.unpatchify(x)
-        if return_cls_token and hasattr(self, "_cls_token"):
-            return cls_token
-        return x
+            return x[:, 0]
+        return x.mean(axis=1)
+
+    def _forward_decoder(self, cls_token: jax.Array) -> jax.Array:
+        if cls_token.ndim == 2:
+            cls_token = cls_token[:, None, :]
+        memory = self.kv_proj(self.kv_norm(cls_token))  # (B, 1, d_model)
+        queries = jnp.broadcast_to(
+            self._queries.value,
+            (cls_token.shape[0], self.n_patches, self.d_model),
+        )
+        for block in self.decoder_blocks:
+            queries = block(queries, memory)
+        queries = self.decoder_norm(queries)
+        patches = self.out_proj(queries)  # (B, P, p*p*C)
+        return self.unpatchify(patches)
 
     def patchify(self, imgs: jax.Array) -> jax.Array:
-        """Split images into patches.
-
-        Parameters
-        ----------
-        imgs : jax.Array
-            Input images of shape (N, H, W, C) in NHWC format.
-
-        Returns
-        -------
-        jax.Array
-            Patchified images of shape (N, L, patch_size**2 * C).
-        """
+        """Split images into patches (NHWC)."""
         p = self.patch_size
         return rearrange(imgs, "n (h p1) (w p2) c -> n (h w) (p1 p2 c)", p1=p, p2=p)
 
     def unpatchify(self, x: jax.Array) -> jax.Array:
-        """Reconstruct images from patches.
-
-        Parameters
-        ----------
-        x : jax.Array
-            Input of shape (N, L, patch_size**2 * C).
-
-        Returns
-        -------
-        jax.Array
-            Images of shape (N, H, W, C) in NHWC format.
-        """
+        """Reconstruct images from patches (NHWC)."""
         p = self.patch_size
         h = self.obs_shape[0] // p
         w = self.obs_shape[1] // p
@@ -414,13 +612,12 @@ class ViT(nnx.Module):
 
     @property
     def conved_size(self) -> int:
-        """Get the flattened output size."""
-        return self.out_patch_dim * self.get_n_patches(self.in_shape)
+        """Get the CLS-token output size."""
+        return self.d_model
 
     @property
     def conved_shape(self) -> tuple[int, int]:
-        """Get the output shape after transformer."""
-        return (self.out_patch_dim, self.out_patch_dim)
+        return (1, 1)
 
     def get_n_patches(self, obs_shape: tuple[int, int, int]) -> int:
         """Get number of patches for a given shape (NHWC: H, W, C)."""
@@ -431,44 +628,10 @@ class ViT(nnx.Module):
         return self.patch_size**2 * obs_shape[2]
 
     @staticmethod
-    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ViTConfig) -> tuple[int, int, int]:
-        """Get the required input shape (NHWC: H, W, C)."""
-        return (obs_shape[0], obs_shape[1], cfg.init_channel)
-
-
-class _ViTBlock(nnx.Module):
-    """Single ViT transformer block (pre-norm)."""
-
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        mlp_hidden_dim: int,
-        *,
-        rngs: nnx.Rngs,
-    ) -> None:
-        self.norm1 = nnx.LayerNorm(num_features=dim, rngs=rngs)
-        self.attn = nnx.MultiHeadAttention(
-            num_heads=num_heads,
-            in_features=dim,
-            decode=False,
-            rngs=rngs,
-        )
-        self.norm2 = nnx.LayerNorm(num_features=dim, rngs=rngs)
-        self.fc1 = nnx.Linear(dim, mlp_hidden_dim, rngs=rngs)
-        self.fc2 = nnx.Linear(mlp_hidden_dim, dim, rngs=rngs)
-
-    def __call__(self, x: jax.Array) -> jax.Array:
-        # Self-attention with residual
-        h = self.norm1(x)
-        h = self.attn(h)
-        x = x + h
-        # MLP with residual
-        h = self.norm2(x)
-        h = self.fc1(h)
-        h = jax.nn.gelu(h)
-        h = self.fc2(h)
-        return x + h
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ViTConfig) -> tuple[int, ...]:
+        """Input shape consumed by the ViT decoder: the CLS token has dimension ``d_model``."""
+        del obs_shape
+        return (cfg.transformer_cfg.d_model,)
 
 
 class ConvNet(nnx.Module):
