@@ -464,7 +464,7 @@ class AdaptiveAveragePoolingConfig:
     """
 
     output_size: int | tuple[int, ...] = (1, 1)
-    additional_layer: (MLPConfig | LinearConfig) | None = None
+    additional_layer: MLPConfig | LinearConfig | None = None
 
     def __post_init__(self) -> None:
         """Ensure output_size is a tuple."""
@@ -500,7 +500,7 @@ class SpatialSoftmaxConfig:
     eps: float = 1e-6
     is_argmax: bool = False
     is_straight_through: bool = False
-    additional_layer: (MLPConfig | LinearConfig) | None = None
+    additional_layer: MLPConfig | LinearConfig | None = None
 
 
 @dataclass
