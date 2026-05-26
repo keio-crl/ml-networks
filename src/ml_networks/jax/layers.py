@@ -389,6 +389,7 @@ class MLPLayer(nnx.Module):
         )
         last_cfg = deepcopy(self.cfg.linear_cfg)
         last_cfg.activation = self.cfg.output_activation
+        last_cfg.norm = "none"
         layers.append(LinearNormActivation(self.hidden_dim, self.output_dim, last_cfg, rngs=rngs))
         return layers
 
