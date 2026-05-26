@@ -9,7 +9,7 @@
 ### 多クラス分類の場合
 
 ```python
-from ml_networks import focal_loss
+from ml_networks.torch import focal_loss
 import torch
 
 logits = torch.randn(32, 10)
@@ -25,7 +25,7 @@ loss = focal_loss(
 ### 二値分類の場合
 
 ```python
-from ml_networks import binary_focal_loss
+from ml_networks.torch import binary_focal_loss
 
 logits = torch.randn(32)
 labels = torch.randint(0, 2, (32,))
@@ -42,7 +42,7 @@ loss = binary_focal_loss(
 画像再構成の損失関数です。損失の勾配が安定します。
 
 ```python
-from ml_networks import charbonnier
+from ml_networks.torch import charbonnier
 
 loss = charbonnier(
     predicted_obs,
@@ -58,7 +58,7 @@ loss = charbonnier(
 画像自体でなく、画像の周波数成分に焦点を当てた損失関数です。Focal Lossを画像に適用したものという位置付けです。
 
 ```python
-from ml_networks import FocalFrequencyLoss
+from ml_networks.torch import FocalFrequencyLoss
 
 loss_fn = FocalFrequencyLoss(
     loss_weight=1.0,      # Focal Frequency Lossの重み
@@ -77,7 +77,7 @@ loss = loss_fn(predicted_obs, obs)
 分布間のKLダイバージェンスを計算します。
 
 ```python
-from ml_networks import kl_divergence
+from ml_networks.torch import kl_divergence
 import torch.distributions as D
 
 # 例: 正規分布間のKLダイバージェンス
@@ -91,7 +91,7 @@ kld = kl_divergence(dist1, dist2)
 複数のKLダイバージェンスをバランスするためのユーティリティです。
 
 ```python
-from ml_networks import kl_balancing
+from ml_networks.torch import kl_balancing
 
 # 複数のKLダイバージェンスをバランス
 kld_list = [kld1, kld2, kld3]

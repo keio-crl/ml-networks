@@ -19,7 +19,7 @@
 
 ```yaml
 encoder:
-  _target_: ml_networks.vision.Encoder
+  _target_: ml_networks.torch.vision.Encoder
   feature_dim: 128  # 正規分布の場合、特徴量次元の2倍が必要
   obs_shape: [3, 64, 64]
   encoder_cfg:
@@ -52,7 +52,7 @@ encoder:
       bias: true
 
 distribution:
-  _target_: ml_networks.distributions.Distribution
+  _target_: ml_networks.torch.distributions.Distribution
   in_dim: 64
   dist: normal
   n_groups: 1
@@ -94,7 +94,8 @@ kld = D.kl_divergence(torch_dist_z, normal).mean()
 #### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import Distribution, Encoder, ConvNetConfig, ConvConfig, MLPConfig, LinearConfig
+from ml_networks.torch import Distribution, Encoder
+from ml_networks import ConvNetConfig, ConvConfig, MLPConfig, LinearConfig
 import torch
 import torch.distributions as D
 
@@ -181,7 +182,7 @@ dist = Distribution(
 ### stack
 
 ```python
-from ml_networks import stack_dist
+from ml_networks.torch import stack_dist
 
 dist_list = []
 for batch in dataloader:
@@ -199,7 +200,7 @@ print(stacked_dist.shape)
 ### concatenate
 
 ```python
-from ml_networks import cat_dist
+from ml_networks.torch import cat_dist
 
 # 分布データをconcatenate
 concatenated_dist = cat_dist(dist_list, dim=-1)

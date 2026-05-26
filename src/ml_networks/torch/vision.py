@@ -19,6 +19,7 @@ from ml_networks.config import (
     SpatialSoftmaxConfig,
     ViTConfig,
 )
+from ml_networks.torch.activations import Activation
 from ml_networks.torch.base import BaseModule
 from ml_networks.torch.layers import (
     Attention2d,
@@ -27,10 +28,8 @@ from ml_networks.torch.layers import (
     LinearNormActivation,
     MLPLayer,
     PatchEmbed,
-    PositionalEncoding,
     ResidualBlock,
     SpatialSoftmax,
-    TransformerLayer,
 )
 from ml_networks.utils import conv_out_shape, conv_transpose_in_shape, conv_transpose_out_shape
 
@@ -136,6 +135,8 @@ class Encoder(BaseModule):
         self.obs_shape = obs_shape
 
         self.encoder: nn.Module
+        self.fc: nn.Module
+        self._is_vit = isinstance(backbone_cfg, ViTConfig)
         if isinstance(backbone_cfg, ViTConfig):
             self.encoder = ViT(obs_shape, backbone_cfg)
         elif isinstance(backbone_cfg, ConvNetConfig):
@@ -147,6 +148,29 @@ class Encoder(BaseModule):
             raise NotImplementedError(msg)
 
         self.feature_dim = feature_dim
+
+        if self._is_vit:
+            # ViT encoder returns the CLS token (B, d_model); skip the convolutional reshape.
+            assert isinstance(backbone_cfg, ViTConfig)
+            d_model = backbone_cfg.transformer_cfg.d_model
+            self.last_channel = d_model
+            self.conved_shape = (1, 1)
+            self.conved_size = d_model
+            assert isinstance(feature_dim, int), "feature_dim must be int when using ViTConfig backbone"
+            if isinstance(fc_cfg, MLPConfig):
+                self.fc = MLPLayer(d_model, feature_dim, fc_cfg)
+            elif isinstance(fc_cfg, LinearConfig):
+                self.fc = LinearNormActivation(d_model, feature_dim, fc_cfg)
+            elif fc_cfg is None:
+                assert d_model == feature_dim, (
+                    f"feature_dim must equal transformer d_model when fc_cfg is None, got {feature_dim} vs {d_model}"
+                )
+                self.fc = nn.Identity()
+            else:
+                msg = f"fc_cfg type {type(fc_cfg)} is not supported with ViTConfig backbone"
+                raise NotImplementedError(msg)
+            return
+
         # 型情報を補うために明示的にキャスト
         self.conved_size = cast("int", self.encoder.conved_size)
         self.conved_shape = cast("tuple[int, int]", self.encoder.conved_shape)
@@ -158,7 +182,6 @@ class Encoder(BaseModule):
             assert feature_dim == (self.last_channel, *self.conved_shape), (
                 f"{feature_dim} != {(self.last_channel, *self.conved_shape)}"
             )
-        self.fc: nn.Module
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
             self.fc = nn.Sequential(
@@ -254,8 +277,12 @@ class Encoder(BaseModule):
 
         x = x.reshape([-1, *self.obs_shape])
         x = self.encoder(x)
-        x = x.view(-1, self.last_channel, *self.conved_shape)
-        x = self.fc(x)
+        if self._is_vit:
+            # ViT encoder returns the CLS token (B, d_model); feed it directly into fc.
+            x = self.fc(x)
+        else:
+            x = x.view(-1, self.last_channel, *self.conved_shape)
+            x = self.fc(x)
         return x.reshape([*batch_shape, *x.shape[1:]])
 
 
@@ -377,45 +404,68 @@ class Decoder(BaseModule):
 
         self.obs_shape = obs_shape
         self.feature_dim = feature_dim
+        self._is_vit = isinstance(backbone_cfg, ViTConfig)
+        self.fc: nn.Module
+        self.input_shape: tuple[int, ...]
+        self.decoder: nn.Module
 
-        self.input_shape: tuple[int, int, int]
-        if isinstance(backbone_cfg, ViTConfig):
-            self.input_shape = ViT.get_input_shape(obs_shape, backbone_cfg)
-        elif isinstance(backbone_cfg, ConvNetConfig):
-            self.input_shape = cast(
+        if self._is_vit:
+            assert isinstance(backbone_cfg, ViTConfig)
+            d_model = backbone_cfg.transformer_cfg.d_model
+            assert isinstance(feature_dim, int), "feature_dim must be int when using ViTConfig backbone"
+            # ViT decoder consumes a CLS token (B, d_model); fc maps feature_dim -> d_model.
+            if isinstance(fc_cfg, MLPConfig):
+                self.fc = MLPLayer(feature_dim, d_model, fc_cfg)
+            elif isinstance(fc_cfg, LinearConfig):
+                self.fc = LinearNormActivation(feature_dim, d_model, fc_cfg)
+            elif fc_cfg is None:
+                assert feature_dim == d_model, (
+                    f"feature_dim must equal transformer d_model when fc_cfg is None, got {feature_dim} vs {d_model}"
+                )
+                self.fc = nn.Identity()
+            else:
+                msg = f"fc_cfg type {type(fc_cfg)} is not supported with ViTConfig backbone"
+                raise NotImplementedError(msg)
+            self.input_shape = (d_model,)
+            self.has_fc = True
+            self.decoder = ViT(in_shape=(d_model,), obs_shape=obs_shape, cfg=backbone_cfg)
+            return
+
+        in_shape3: tuple[int, int, int]
+        if isinstance(backbone_cfg, ConvNetConfig):
+            in_shape3 = cast(
                 "tuple[int, int, int]",
                 ConvTranspose.get_input_shape(obs_shape, backbone_cfg),
             )
         elif isinstance(backbone_cfg, ResNetConfig):
-            self.input_shape = cast(
+            in_shape3 = cast(
                 "tuple[int, int, int]",
                 ResNetPixShuffle.get_input_shape(obs_shape, backbone_cfg),
             )
         else:
             msg = f"{type(backbone_cfg)} is not implemented"
             raise NotImplementedError(msg)
+        self.input_shape = in_shape3
         if isinstance(feature_dim, int):
             assert fc_cfg is not None, "fc_cfg must be provided if feature_dim is provided"
             self.has_fc = True
         else:
-            assert feature_dim == self.input_shape, f"{feature_dim} != {self.input_shape}"
+            assert feature_dim == in_shape3, f"{feature_dim} != {in_shape3}"
             self.has_fc = False
 
         if isinstance(fc_cfg, MLPConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using MLPConfig"
-            self.fc: nn.Module = MLPLayer(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
+            self.fc = MLPLayer(feature_dim, int(np.prod(in_shape3)), fc_cfg)
         elif isinstance(fc_cfg, LinearConfig):
             assert isinstance(feature_dim, int), "feature_dim must be int when using LinearConfig"
-            self.fc = LinearNormActivation(feature_dim, int(np.prod(self.input_shape)), fc_cfg)
+            self.fc = LinearNormActivation(feature_dim, int(np.prod(in_shape3)), fc_cfg)
         else:
             self.fc = nn.Identity()
 
-        if isinstance(backbone_cfg, ViTConfig):
-            self.decoder: nn.Module = ViT(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
-        elif isinstance(backbone_cfg, ConvNetConfig):
-            self.decoder = ConvTranspose(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+        if isinstance(backbone_cfg, ConvNetConfig):
+            self.decoder = ConvTranspose(in_shape=in_shape3, obs_shape=obs_shape, cfg=backbone_cfg)
         elif isinstance(backbone_cfg, ResNetConfig):
-            self.decoder = ResNetPixShuffle(in_shape=self.input_shape, obs_shape=obs_shape, cfg=backbone_cfg)
+            self.decoder = ResNetPixShuffle(in_shape=in_shape3, obs_shape=obs_shape, cfg=backbone_cfg)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -432,6 +482,13 @@ class Decoder(BaseModule):
             output tensor of shape (batch_size, *obs_shape)
 
         """
+        if self._is_vit:
+            batch_shape, data_shape = x.shape[:-1], x.shape[-1:]
+            x = x.reshape([-1, *data_shape])
+            x = self.fc(x)  # (B, d_model)
+            x = self.decoder(x)  # (B, *obs_shape)
+            return x.reshape([*batch_shape, *self.obs_shape])
+
         if self.has_fc:
             batch_shape, data_shape = x.shape[:-1], x.shape[-1:]
         else:
@@ -444,22 +501,108 @@ class Decoder(BaseModule):
         return x.reshape([*batch_shape, *self.obs_shape])
 
 
+class _ViTEncoderBlock(nn.Module):
+    """ViT encoder block (pre-norm). Positional embedding is added to query and key only.
+
+    Follows the DETR convention (https://github.com/gokul-pv/DetectionTransformer): at every
+    layer the spatial positional embedding is added to the query and key tensors of the
+    self-attention, while the value tensor is left unmodified.
+    """
+
+    def __init__(self, d_model: int, nhead: int, dim_ff: int, dropout: float, activation: str) -> None:
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=nhead,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.norm2 = nn.LayerNorm(d_model)
+        self.linear1 = nn.Linear(d_model, dim_ff)
+        self.activation = Activation(activation)
+        self.linear2 = nn.Linear(dim_ff, d_model)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+    def forward(self, x: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
+        h = self.norm1(x)
+        q = k = h + pos
+        v = h
+        attn_out, _ = self.attn(q, k, v, need_weights=False)
+        x = x + self.dropout(attn_out)
+        h = self.norm2(x)
+        h = self.linear1(h)
+        h = self.activation(h)
+        h = self.dropout(h)
+        h = self.linear2(h)
+        return x + self.dropout(h)
+
+
+class _ViTDecoderBlock(nn.Module):
+    """ViT decoder block: cross-attention from learnable queries to the projected CLS token.
+
+    Pre-norm cross-attention where the queries are the learnable patch tokens and the
+    key/value come from the projected CLS representation, followed by a residual MLP block.
+    """
+
+    def __init__(self, d_model: int, nhead: int, dim_ff: int, dropout: float, activation: str) -> None:
+        super().__init__()
+        self.norm_q = nn.LayerNorm(d_model)
+        self.norm_kv = nn.LayerNorm(d_model)
+        self.cross_attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=nhead,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.norm_mlp = nn.LayerNorm(d_model)
+        self.linear1 = nn.Linear(d_model, dim_ff)
+        self.activation = Activation(activation)
+        self.linear2 = nn.Linear(dim_ff, d_model)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+    def forward(self, queries: torch.Tensor, memory: torch.Tensor) -> torch.Tensor:
+        q = self.norm_q(queries)
+        kv = self.norm_kv(memory)
+        attn_out, _ = self.cross_attn(q, kv, kv, need_weights=False)
+        queries = queries + self.dropout(attn_out)
+        h = self.norm_mlp(queries)
+        h = self.linear1(h)
+        h = self.activation(h)
+        h = self.linear2(h)
+        return queries + self.dropout(h)
+
+
 class ViT(nn.Module):
     """
     Vision Transformer for Encoder and Decoder.
 
+    The encoder mode (``obs_shape is None``) follows the DETR convention: a learnable per-patch
+    positional embedding is added to the query and key tensors of every self-attention layer
+    (rather than being added once at the input). When ``cfg.cls_token`` is True a CLS token with
+    its own learnable positional embedding is prepended, and the forward pass returns the CLS
+    token of shape ``(B, d_model)``.
+
+    The decoder mode (``obs_shape is not None``) takes a CLS token of shape ``(B, d_model)`` or
+    ``(B, 1, d_model)`` and reconstructs an image. The CLS token is projected to a hidden
+    dimension and used as the key/value of cross-attention. A fixed set of
+    ``P = (H // p) * (W // p)`` learnable query tokens interacts with this representation
+    through several cross-attention layers with residual MLP blocks. Each query is then
+    linearly projected to ``p * p * C`` pixels and rearranged into a ``(B, C, H, W)`` image.
+
     Parameters
     ----------
-    in_shape: tuple[int, int, int]
-        shape of input tensor
-    cfg: ViTConfig
-        configuration of the network
-    obs_shape: tuple[int, int, int]
-        shape of output tensor. If None, it is considered as Encoder. Default is None.
+    in_shape : tuple[int, ...]
+        Encoder mode: image shape ``(C, H, W)``. Decoder mode: ``(d_model,)``; the CLS token is
+        the input.
+    cfg : ViTConfig
+        Network configuration.
+    obs_shape : tuple[int, int, int] | None
+        Output image shape for decoder mode. ``None`` selects encoder mode.
 
     Examples
     --------
-    >>> from ml_networks.layers import TransformerConfig
+    >>> from ml_networks.config import TransformerConfig
     >>> in_shape = (3, 64, 64)
     >>> cfg = ViTConfig(
     ...     patch_size=8,
@@ -468,23 +611,27 @@ class ViT(nn.Module):
     ...         d_model=64,
     ...         nhead=8,
     ...         dim_ff=256,
-    ...         n_layers=3,
+    ...         n_layers=2,
     ...         dropout=0.0,
-    ...         hidden_activation="ReLU",
-    ...         output_activation="ReLU"
+    ...         hidden_activation="GELU",
+    ...         output_activation="GELU",
     ...     ),
-    ...     init_channel=3
+    ...     init_channel=3,
     ... )
     >>> encoder = ViT(in_shape, cfg)
     >>> x = torch.randn(2, *in_shape)
-    >>> y = encoder(x)
+    >>> cls = encoder(x)
+    >>> cls.shape
+    torch.Size([2, 64])
+    >>> decoder = ViT(in_shape=(64,), cfg=cfg, obs_shape=(3, 64, 64))
+    >>> y = decoder(cls)
     >>> y.shape
-    torch.Size([2, 1, 64, 64])
+    torch.Size([2, 3, 64, 64])
     """
 
     def __init__(
         self,
-        in_shape: tuple[int, int, int],
+        in_shape: tuple[int, ...],
         cfg: ViTConfig,
         obs_shape: tuple[int, int, int] | None = None,
     ) -> None:
@@ -492,105 +639,147 @@ class ViT(nn.Module):
 
         self.in_shape = in_shape
         self.cfg = cfg
-        self.obs_shape = obs_shape if obs_shape is not None else in_shape
         self.patch_size = cfg.patch_size
-
         self.transformer_cfg = cfg.transformer_cfg
-        self.in_patch_dim = self.get_patch_dim(in_shape)
-        self.out_patch_dim = self.get_patch_dim(obs_shape) if obs_shape is not None else self.transformer_cfg.d_model
-        self.positional_embedding = PositionalEncoding(
-            self.in_patch_dim,
-            self.transformer_cfg.dropout,
-            max_len=self.get_n_patches(in_shape),
-        )
-        self.vit = TransformerLayer(
-            self.in_patch_dim,
-            self.out_patch_dim,
-            self.transformer_cfg,
-        )
         self.is_encoder = obs_shape is None
-        if self.is_encoder:
-            self.n_patches = self.get_n_patches(in_shape)
-            self.patch_embed = PatchEmbed(
-                emb_dim=self.in_patch_dim,
-                patch_size=self.patch_size,
-                obs_shape=in_shape,
-            )
-        self.should_unpatchify = cfg.unpatchify
-        if cfg.cls_token:
-            self.cls_token = nn.Parameter(torch.randn(1, 1, self.in_patch_dim))
-        self.last_channel = self.get_n_patches(in_shape)
+        self.obs_shape: tuple[int, int, int] = (
+            obs_shape if obs_shape is not None else cast("tuple[int, int, int]", in_shape)
+        )
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        return_cls_token: bool = False,
-    ) -> torch.Tensor:
+        d_model = self.transformer_cfg.d_model
+        self.d_model = d_model
+
+        if self.is_encoder:
+            self._build_encoder()
+            self.last_channel = d_model
+            self.out_patch_dim = d_model
+        else:
+            self._build_decoder()
+            self.out_patch_dim = self.patch_size**2 * self.obs_shape[0]
+            self.last_channel = self.out_patch_dim
+
+    def _build_encoder(self) -> None:
+        cfg = self.cfg
+        t_cfg = self.transformer_cfg
+        d_model = self.d_model
+        assert len(self.in_shape) == 3, "Encoder mode requires in_shape=(C, H, W)"
+        in_shape3 = cast("tuple[int, int, int]", self.in_shape)
+        n_patches = self.get_n_patches(in_shape3)
+
+        self.patch_embed = PatchEmbed(
+            emb_dim=d_model,
+            patch_size=self.patch_size,
+            obs_shape=in_shape3,
+        )
+        # Learnable positional embedding added to query and key at every encoder layer.
+        self.pos_emb = nn.Parameter(torch.randn(1, n_patches, d_model) * 0.02)
+
+        if cfg.cls_token:
+            self.cls_token = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+            self.cls_pos_emb = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+
+        self.encoder_blocks = nn.ModuleList(
+            [
+                _ViTEncoderBlock(
+                    d_model=d_model,
+                    nhead=t_cfg.nhead,
+                    dim_ff=t_cfg.dim_ff,
+                    dropout=t_cfg.dropout,
+                    activation=t_cfg.hidden_activation,
+                )
+                for _ in range(t_cfg.n_layers)
+            ],
+        )
+        self.encoder_norm = nn.LayerNorm(d_model)
+        self.n_patches = n_patches
+
+    def _build_decoder(self) -> None:
+        t_cfg = self.transformer_cfg
+        d_model = self.d_model
+        n_patches = self.get_n_patches(self.obs_shape)
+
+        # Learnable patch queries (1, P, d_model). One query per output patch.
+        self.queries = nn.Parameter(torch.randn(1, n_patches, d_model) * 0.02)
+        # Project the CLS token to the hidden dimension used as K/V in cross-attention.
+        self.kv_norm = nn.LayerNorm(d_model)
+        self.kv_proj = nn.Linear(d_model, d_model)
+
+        self.decoder_blocks = nn.ModuleList(
+            [
+                _ViTDecoderBlock(
+                    d_model=d_model,
+                    nhead=t_cfg.nhead,
+                    dim_ff=t_cfg.dim_ff,
+                    dropout=t_cfg.dropout,
+                    activation=t_cfg.hidden_activation,
+                )
+                for _ in range(t_cfg.n_layers)
+            ],
+        )
+        self.decoder_norm = nn.LayerNorm(d_model)
+        out_patch_dim = self.patch_size**2 * self.obs_shape[0]
+        self.out_proj = nn.Linear(d_model, out_patch_dim)
+        self.output_activation = Activation(self.cfg.decoder_output_activation)
+        self.n_patches = n_patches
+
+    def forward(self, x: torch.Tensor, return_cls_token: bool = False) -> torch.Tensor:
         """
         Forward pass.
 
         Parameters
         ----------
-        x: torch.Tensor
-            input tensor of shape (batch_size, *in_shape)
-        return_cls_token: bool
-            whether to return cls_token. Default is False.
+        x : torch.Tensor
+            Encoder mode: image of shape ``(B, C, H, W)``.
+            Decoder mode: CLS token of shape ``(B, d_model)`` or ``(B, 1, d_model)``.
+        return_cls_token : bool
+            Retained for backward compatibility; the encoder always returns the CLS token.
 
         Returns
         -------
         torch.Tensor
-            output tensor of shape (batch_size, *obs_shape)
-        torch.Tensor
-            cls_token of shape (batch_size, self.out_patch_dim) if return_cls_token
-
+            Encoder mode: CLS token of shape ``(B, d_model)``.
+            Decoder mode: reconstructed image of shape ``(B, C, H, W)``.
         """
-        x = self.patch_embed(x) if self.is_encoder else self.patchify(x)
-        x = self.positional_embedding(x)
+        del return_cls_token
+        if self.is_encoder:
+            return self._forward_encoder(x)
+        return self._forward_decoder(x)
+
+    def _forward_encoder(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.patch_embed(x)  # (B, N, d_model)
+        pos = self.pos_emb.expand(x.shape[0], -1, -1)
         if hasattr(self, "cls_token"):
-            cls_token = self.cls_token.expand(x.shape[0], -1, -1)
-            x = torch.cat([cls_token, x], dim=1)
-        x = self.vit(x)
+            cls = self.cls_token.expand(x.shape[0], -1, -1)
+            cls_pos = self.cls_pos_emb.expand(x.shape[0], -1, -1)
+            x = torch.cat([cls, x], dim=1)
+            pos = torch.cat([cls_pos, pos], dim=1)
+        for block in self.encoder_blocks:
+            x = block(x, pos)
+        x = self.encoder_norm(x)
         if hasattr(self, "cls_token"):
-            cls_token = x[:, 0]
-            x = x[:, 1:]
-        if self.should_unpatchify:
-            x = self.unpatchify(x)
-        if return_cls_token and hasattr(self, "cls_token"):
-            return cls_token
-        return x
+            return x[:, 0]
+        return x.mean(dim=1)
+
+    def _forward_decoder(self, cls_token: torch.Tensor) -> torch.Tensor:
+        if cls_token.dim() == 2:
+            cls_token = cls_token.unsqueeze(1)
+        memory = self.kv_proj(self.kv_norm(cls_token))  # (B, 1, d_model)
+        queries = self.queries.expand(cls_token.shape[0], -1, -1)
+        for block in self.decoder_blocks:
+            queries = block(queries, memory)
+        queries = self.decoder_norm(queries)
+        patches = self.output_activation(self.out_proj(queries))
+        return self.unpatchify(patches)
 
     def patchify(self, imgs: torch.Tensor) -> torch.Tensor:
-        """
-        画像をパッチに分割する.
-
-        Parameters
-        ----------
-        imgs: torch.Tensor
-            入力画像. (N, C, H, W)
-
-        Returns
-        -------
-        torch.Tensor
-            パッチ化した画像. (N, L, patch_size**2 * D)
-        """
+        """画像をパッチに分割する."""
         p = self.patch_size
         assert imgs.shape[-1] % p == 0
         assert imgs.shape[-2] % p == 0
         return rearrange(imgs, "n c (h p1) (w p2) -> n (h w) (p1 p2 c)", p1=p, p2=p)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        パッチを画像に戻す.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            入力. (N, L, patch_size**2 * D)
-
-        Returns
-        -------
-            画像. (N, C, H, W)
-        """
+        """パッチを画像に戻す."""
         p = self.patch_size
         h = self.obs_shape[1] // p
         w = self.obs_shape[2] // p
@@ -601,11 +790,11 @@ class ViT(nn.Module):
 
     @property
     def conved_size(self) -> int:
-        return self.out_patch_dim * self.get_n_patches(self.in_shape)
+        return self.d_model
 
     @property
     def conved_shape(self) -> tuple[int, int]:
-        return (self.out_patch_dim, self.out_patch_dim)
+        return (1, 1)
 
     def get_n_patches(self, obs_shape: tuple[int, int, int]) -> int:
         return (obs_shape[1] // self.patch_size) * (obs_shape[2] // self.patch_size)
@@ -614,8 +803,10 @@ class ViT(nn.Module):
         return self.patch_size**2 * obs_shape[0]
 
     @staticmethod
-    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ViTConfig) -> tuple[int, int, int]:
-        return (cfg.init_channel, obs_shape[1], obs_shape[2])
+    def get_input_shape(obs_shape: tuple[int, int, int], cfg: ViTConfig) -> tuple[int, ...]:
+        """Input shape consumed by the ViT decoder: the CLS token has dimension ``d_model``."""
+        del obs_shape
+        return (cfg.transformer_cfg.d_model,)
 
 
 class ResNetPixUnshuffle(nn.Module):
