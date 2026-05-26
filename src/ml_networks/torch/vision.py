@@ -719,6 +719,7 @@ class ViT(nn.Module):
         self.decoder_norm = nn.LayerNorm(d_model)
         out_patch_dim = self.patch_size**2 * self.obs_shape[0]
         self.out_proj = nn.Linear(d_model, out_patch_dim)
+        self.output_activation = Activation(self.cfg.decoder_output_activation)
         self.n_patches = n_patches
 
     def forward(self, x: torch.Tensor, return_cls_token: bool = False) -> torch.Tensor:
@@ -767,7 +768,7 @@ class ViT(nn.Module):
         for block in self.decoder_blocks:
             queries = block(queries, memory)
         queries = self.decoder_norm(queries)
-        patches = self.out_proj(queries)
+        patches = self.output_activation(self.out_proj(queries))
         return self.unpatchify(patches)
 
     def patchify(self, imgs: torch.Tensor) -> torch.Tensor:

@@ -442,6 +442,9 @@ class ViTConfig:
         Whether to use class token. Default is True.
     init_channel : int
         Initial number of channels. Default is 16.
+    decoder_output_activation : str
+        Activation function applied to the reconstructed pixel values in decoder mode.
+        Ignored in encoder mode. Default is "Identity" (no activation).
     """
 
     patch_size: int
@@ -449,6 +452,7 @@ class ViTConfig:
     cls_token: bool = True
     init_channel: int = 16
     unpatchify: bool = False
+    decoder_output_activation: str = "Identity"
 
 
 @dataclass

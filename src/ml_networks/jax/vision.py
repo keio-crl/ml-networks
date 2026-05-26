@@ -541,6 +541,7 @@ class ViT(nnx.Module):
         self.decoder_norm = nnx.LayerNorm(num_features=d_model, rngs=rngs)
         out_patch_dim = self.patch_size**2 * self.obs_shape[2]
         self.out_proj = nnx.Linear(d_model, out_patch_dim, rngs=rngs)
+        self.output_activation = Activation(self.cfg.decoder_output_activation)
         self.n_patches = n_patches
 
     def __call__(self, x: jax.Array, *, return_cls_token: bool = False) -> jax.Array:
@@ -592,7 +593,7 @@ class ViT(nnx.Module):
         for block in self.decoder_blocks:
             queries = block(queries, memory)
         queries = self.decoder_norm(queries)
-        patches = self.out_proj(queries)  # (B, P, p*p*C)
+        patches = self.output_activation(self.out_proj(queries))  # (B, P, p*p*C)
         return self.unpatchify(patches)
 
     def patchify(self, imgs: jax.Array) -> jax.Array:
