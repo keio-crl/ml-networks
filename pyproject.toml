@@ -1,6 +1,6 @@
 [project]
 name = "ml-networks"
-version = "0.2.4+python3.8"
+version = "0.2.4+py38"
 description = "A unified deep learning model building library for PyTorch and JAX with shared dataclass-based configuration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -27,13 +27,13 @@ dependencies = [
     "einops>=0.8.1",
     "kornia>=0.7.3",
     "natsort>=8.4.0",
-    "omegaconf>=2.3.0",
-    "pytorch-lightning>=2.4.0",
-    "pytorch-optimizer>=3.4.2",
+    "omegaconf>=2.0",
+    "pytorch-lightning>=1.9.0",
+    "pytorch-optimizer>=2.5.0",
     "schedulefree>=1.4",
-    "torch>=2.0",
+    "torch>=1.10",
     "torchgeometry>=0.1.2",
-    "torchvision>=0.19.0",
+    "torchvision>=0.14",
 ]
 
 [project.urls]
