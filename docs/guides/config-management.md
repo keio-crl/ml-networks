@@ -30,7 +30,7 @@ pip install hydra-core
 **例: `configs/mlp_config.yaml`**
 
 ```yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:
@@ -49,7 +49,7 @@ mlp_config:
 **例: `configs/encoder_config.yaml`**
 
 ```yaml
-_target_: ml_networks.vision.Encoder
+_target_: ml_networks.torch.vision.Encoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 encoder_cfg:
@@ -115,7 +115,7 @@ print(y.shape)  # torch.Size([32, 8])
 
 ```yaml
 encoder:
-  _target_: ml_networks.vision.Encoder
+  _target_: ml_networks.torch.vision.Encoder
   feature_dim: 128  # 正規分布の場合、特徴量次元の2倍が必要
   obs_shape: [3, 64, 64]
   encoder_cfg:
@@ -138,7 +138,7 @@ encoder:
       bias: true
 
 distribution:
-  _target_: ml_networks.distributions.Distribution
+  _target_: ml_networks.torch.distributions.Distribution
   in_dim: 64
   dist: normal
   n_groups: 1
@@ -178,7 +178,7 @@ cfg = OmegaConf.load("configs/encoder_config.yaml")
 encoder_cfg = instantiate(cfg.encoder_cfg)
 
 # その後、手動でEncoderを作成
-from ml_networks.vision import Encoder
+from ml_networks.torch.vision import Encoder
 encoder = Encoder(
     feature_dim=cfg.feature_dim,
     obs_shape=tuple(cfg.obs_shape),
@@ -246,7 +246,7 @@ obs_shape: [3, 128, 128]
 
 ```yaml
 # configs/mlp_simple.yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:
@@ -264,7 +264,7 @@ mlp_config:
 
 ```yaml
 # configs/encoder_resnet.yaml
-_target_: ml_networks.vision.Encoder
+_target_: ml_networks.torch.vision.Encoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 encoder_cfg:
@@ -291,7 +291,7 @@ full_connection_cfg:
 
 ```yaml
 # configs/decoder_config.yaml
-_target_: ml_networks.vision.Decoder
+_target_: ml_networks.torch.vision.Decoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 decoder_cfg:

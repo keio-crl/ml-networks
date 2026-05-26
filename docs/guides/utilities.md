@@ -12,7 +12,7 @@ stringで活性化関数を指定できます。PyTorchに実装されている�
 - **"TanhExp"**: Mishの改善版という位置付け
 
 ```python
-from ml_networks import Activation
+from ml_networks.torch import Activation
 
 act = Activation("ReLU")
 x = torch.randn(32, 64)
@@ -24,7 +24,7 @@ y = act(x)
 stringで最適化手法を指定できます。PyTorchに実装されている最適化手法に加えて、[pytorch_optimizer](https://pypi.org/project/pytorch_optimizer/)に実装されている最適化手法が使えます。
 
 ```python
-from ml_networks import get_optimizer
+from ml_networks.torch import get_optimizer
 import torch.nn as nn
 
 model = nn.Linear(16, 8)
@@ -38,7 +38,8 @@ optimizer = get_optimizer(model.parameters(), "Adam", lr=1e-3, weight_decay=1e-4
 再現性を担保するためにseedを固定できます。
 
 ```python
-from ml_networks import torch_fix_seed, determine_loader
+from ml_networks.torch import torch_fix_seed
+from ml_networks import determine_loader
 
 # random, np, torchのseedを固定する
 # さらにGPU関連の再現性も（ある程度）担保
@@ -70,7 +71,7 @@ loader = determine_loader(
 Gumbel Softmaxを使用できます。
 
 ```python
-from ml_networks import gumbel_softmax
+from ml_networks.torch import gumbel_softmax
 
 logits = torch.randn(32, 10)
 samples = gumbel_softmax(logits, temperature=1.0, hard=True)
@@ -81,7 +82,7 @@ samples = gumbel_softmax(logits, temperature=1.0, hard=True)
 カスタムSoftmaxを使用できます。
 
 ```python
-from ml_networks import softmax
+from ml_networks.torch import softmax
 
 logits = torch.randn(32, 10)
 probs = softmax(logits, dim=-1)
@@ -92,7 +93,7 @@ probs = softmax(logits, dim=-1)
 Min-Max正規化を実行できます。
 
 ```python
-from ml_networks import MinMaxNormalize
+from ml_networks.torch import MinMaxNormalize
 
 normalize = MinMaxNormalize(min=0.0, max=1.0)
 data = torch.randn(32, 3, 64, 64)
@@ -104,7 +105,7 @@ normalized_data = normalize(data)
 Softmax変換を実行できます。
 
 ```python
-from ml_networks import SoftmaxTransformation
+from ml_networks.torch import SoftmaxTransformation
 
 transform = SoftmaxTransformation(temperature=1.0)
 data = torch.randn(32, 10)

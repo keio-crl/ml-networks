@@ -37,7 +37,7 @@ pip install jax flax optax distrax
 まず、設定ファイル `configs/mlp_config.yaml` を作成します：
 
 ```yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:
@@ -74,7 +74,8 @@ print(y.shape)  # torch.Size([32, 8])
 #### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import MLPLayer, MLPConfig, LinearConfig
+from ml_networks.torch import MLPLayer
+from ml_networks import MLPConfig, LinearConfig
 import torch
 
 # MLPの設定
@@ -109,7 +110,7 @@ print(y.shape)  # torch.Size([32, 8])
 設定ファイル `configs/encoder_config.yaml` を作成します：
 
 ```yaml
-_target_: ml_networks.vision.Encoder
+_target_: ml_networks.torch.vision.Encoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 encoder_cfg:
@@ -159,7 +160,8 @@ print(z.shape)  # torch.Size([32, 64])
 #### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import Encoder, ConvNetConfig, ConvConfig, LinearConfig
+from ml_networks.torch import Encoder
+from ml_networks import ConvNetConfig, ConvConfig, LinearConfig
 import torch
 
 # Encoderの設定
@@ -194,7 +196,8 @@ print(z.shape)  # torch.Size([32, 64])
 特徴量から画像を再構成するDecoderを使用します：
 
 ```python
-from ml_networks import Decoder, ConvNetConfig, ConvConfig, LinearConfig
+from ml_networks.torch import Decoder
+from ml_networks import ConvNetConfig, ConvConfig, LinearConfig
 import torch
 
 # Decoderの設定
@@ -229,7 +232,8 @@ print(predicted_obs.shape)  # torch.Size([32, 3, 64, 64])
 特徴量を分布に変換します：
 
 ```python
-from ml_networks import Distribution, Encoder, ConvNetConfig, ConvConfig, MLPConfig, LinearConfig
+from ml_networks.torch import Distribution, Encoder
+from ml_networks import ConvNetConfig, ConvConfig, MLPConfig, LinearConfig
 import torch
 
 # Encoderの設定（分布のパラメータを出力するため、特徴量次元の2倍が必要）

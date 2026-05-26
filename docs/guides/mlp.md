@@ -12,7 +12,7 @@ MLP（多層パーセプトロン）の使用方法を説明します。
 設定ファイル `configs/mlp_config.yaml` を作成します：
 
 ```yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:
@@ -52,7 +52,8 @@ print(y.shape)  # torch.Size([32, 8])
 ### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import MLPLayer, MLPConfig, LinearConfig
+from ml_networks.torch import MLPLayer
+from ml_networks import MLPConfig, LinearConfig
 import torch
 
 mlp_config = MLPConfig(
@@ -111,7 +112,7 @@ print(y.shape)  # torch.Size([32, 8])
 **YAMLファイル** (`configs/mlp_dropout.yaml`):
 
 ```yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:
@@ -142,7 +143,7 @@ mlp = instantiate(cfg)
 **YAMLファイル** (`configs/mlp_layernorm.yaml`):
 
 ```yaml
-_target_: ml_networks.layers.MLPLayer
+_target_: ml_networks.torch.layers.MLPLayer
 input_dim: 16
 output_dim: 8
 mlp_config:

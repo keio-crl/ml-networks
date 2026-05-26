@@ -16,7 +16,7 @@ Decoderは特徴量から画像などを再構成するモジュールです。E
 設定ファイル `configs/decoder_config.yaml` を作成します：
 
 ```yaml
-_target_: ml_networks.vision.Decoder
+_target_: ml_networks.torch.vision.Decoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 decoder_cfg:
@@ -67,7 +67,8 @@ print(predicted_obs.shape)  # torch.Size([32, 3, 64, 64])
 ### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import Decoder, ConvNetConfig, ConvConfig, LinearConfig
+from ml_networks.torch import Decoder
+from ml_networks import ConvNetConfig, ConvConfig, LinearConfig
 import torch
 
 # Decoderの設定
@@ -130,7 +131,7 @@ ResNetとPixelShuffleを組み合わせたデコーダ：
 **YAMLファイル** (`configs/decoder_resnet.yaml`):
 
 ```yaml
-_target_: ml_networks.vision.Decoder
+_target_: ml_networks.torch.vision.Decoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 decoder_cfg:

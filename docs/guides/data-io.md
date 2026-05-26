@@ -28,7 +28,7 @@ loaded_data = load_blosc2("dataset/image.blosc2")
 分布データも保存できます：
 
 ```python
-from ml_networks import Distribution
+from ml_networks.torch import Distribution
 
 dist = Distribution(
     in_dim=feature_dim,

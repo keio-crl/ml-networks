@@ -16,7 +16,7 @@ Encoderは画像などの入力を特徴量に変換するモジュールです�
 設定ファイル `configs/encoder_config.yaml` を作成します：
 
 ```yaml
-_target_: ml_networks.vision.Encoder
+_target_: ml_networks.torch.vision.Encoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 encoder_cfg:
@@ -66,7 +66,8 @@ print(z.shape)  # torch.Size([32, 64])
 ### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks import Encoder, ConvNetConfig, ConvConfig, LinearConfig
+from ml_networks.torch import Encoder
+from ml_networks import ConvNetConfig, ConvConfig, LinearConfig
 import torch
 
 # Encoderの設定
@@ -136,7 +137,7 @@ ResNetとPixelUnShuffleを組み合わせたエンコーダ：
 **YAMLファイル** (`configs/encoder_resnet.yaml`):
 
 ```yaml
-_target_: ml_networks.vision.Encoder
+_target_: ml_networks.torch.vision.Encoder
 feature_dim: 64
 obs_shape: [3, 64, 64]
 encoder_cfg:
@@ -230,7 +231,8 @@ full_connection_cfg = None
 ## 独立したSpatialSoftmaxの使用
 
 ```python
-from ml_networks import SpatialSoftmaxConfig, SpatialSoftmax
+from ml_networks.torch import SpatialSoftmax
+from ml_networks import SpatialSoftmaxConfig
 
 data = torch.randn(32, 3, 64, 64)
 cfg = SpatialSoftmaxConfig(
