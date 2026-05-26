@@ -426,6 +426,12 @@ class TransformerConfig:
     hidden_activation: Literal["ReLU", "GELU"] = "GELU"
     output_activation: str = "GeLU"
 
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `TransformerConfig`."""
+        for key, value in self.__dict__.items():
+            if isinstance(value, (DictConfig, ListConfig, list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
+
 
 @dataclass
 class ViTConfig:
@@ -453,6 +459,13 @@ class ViTConfig:
     init_channel: int = 16
     unpatchify: bool = False
     decoder_output_activation: str = "Identity"
+
+    def dictcfg2dict(self) -> None:
+        """Convert dictConfig to dict for `ViTConfig`."""
+        self.transformer_cfg.dictcfg2dict()
+        for key, value in self.__dict__.items():
+            if isinstance(value, (DictConfig, ListConfig, list, tuple, dict)):
+                setattr(self, key, convert_dictconfig_to_dict(value))
 
 
 @dataclass
