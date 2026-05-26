@@ -343,6 +343,7 @@ class MLPLayer(pl.LightningModule):
             layers += [LinearNormActivation(self.hidden_dim, self.hidden_dim, self.cfg.linear_cfg)]
         last_cfg = deepcopy(self.cfg.linear_cfg)
         last_cfg.activation = self.cfg.output_activation
+        last_cfg.norm = "none"
         layers += [LinearNormActivation(self.hidden_dim, self.output_dim, last_cfg)]
         return nn.Sequential(*layers)
 
