@@ -69,6 +69,7 @@ docs = [
     "mkdocs-git-revision-date-localized-plugin>=1.4.7",
     "mkdocs-material>=9.7.1",
     "mkdocstrings[python]>=0.26.1",
+    "pymdown-extensions<12.2",  # 12.2 以降は mkdocstrings の Highlighter と互換性がない
 ]
 
 [tool.mypy]
