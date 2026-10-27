@@ -29,12 +29,22 @@ from .layers import (
     TransformerLayer,
     get_norm,
 )
-from .loss import FocalFrequencyLoss, binary_focal_loss, charbonnier, focal_loss, kl_balancing, kl_divergence
+from .loss import (
+    FocalFrequencyLoss,
+    binary_focal_loss,
+    charbonnier,
+    cross_entropy,
+    focal_loss,
+    kl_balancing,
+    kl_divergence,
+    soft_target_cross_entropy,
+)
 from .torch_utils import (
     MinMaxNormalize,
     SoftmaxTransformation,
     get_optimizer,
     gumbel_softmax,
+    log_softmax,
     softmax,
     torch_fix_seed,
 )
@@ -84,6 +94,7 @@ __all__ = [
     "binary_focal_loss",
     "cat_dist",
     "charbonnier",
+    "cross_entropy",
     "focal_loss",
     "get_dist",
     "get_norm",
@@ -91,6 +102,8 @@ __all__ = [
     "gumbel_softmax",
     "kl_balancing",
     "kl_divergence",
+    "log_softmax",
+    "soft_target_cross_entropy",
     "softmax",
     "stack_dist",
     "torch_fix_seed",

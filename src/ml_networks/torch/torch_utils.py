@@ -103,9 +103,46 @@ def get_optimizer(
     return optimizer(param, **kwargs)
 
 
+def log_softmax(
+    inputs: torch.Tensor,
+    dim: int = -1,
+    temperature: float = 1.0,
+) -> torch.Tensor:
+    """
+    Log-softmax function with temperature, robust to exponent underflow.
+
+    The argmax entry is excluded from the normalizer so that the log-probability
+    is computed via ``softplus`` of the logit margin. This keeps the argmax entry
+    exactly 0 before the correction and avoids ``log(1 + tiny)`` losing precision.
+
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        Input logits.
+    dim : int
+        Dimension to apply log-softmax. Default is -1.
+    temperature : float
+        Temperature. Default is 1.0.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-softmaxed tensor.
+
+    """
+    z = (inputs / temperature).movedim(dim, -1)
+    i_max = torch.argmax(z, dim=-1, keepdim=True)
+    z_max = torch.gather(z, -1, i_max)  # Max logit.
+    is_max = torch.zeros_like(z, dtype=torch.bool).scatter_(-1, i_max, True)  # Max mask.
+    shifted = torch.where(is_max, torch.zeros_like(z), z - z_max)  # Exact 0 at argmax.
+    others = shifted.masked_fill(is_max, -torch.inf)  # Exclude argmax from sum.
+    m = -torch.logsumexp(others, dim=-1, keepdim=True)  # Logit margin.
+    return (shifted - F.softplus(-m)).movedim(-1, dim)
+
+
 def softmax(
     inputs: torch.Tensor,
-    dim: int,
+    dim: int = -1,
     temperature: float = 1.0,
 ) -> torch.Tensor:
     """
@@ -116,7 +153,7 @@ def softmax(
     inputs : torch.Tensor
         Input tensor.
     dim : int
-        Dimension to apply softmax.
+        Dimension to apply softmax. Default is -1.
     temperature : float
         Temperature. Default is 1.0.
 
@@ -130,8 +167,7 @@ def softmax(
     ValueError
         If the softmax is inf or nan.
     """
-    x = inputs / temperature
-    x = torch.exp(F.log_softmax(x, dim=dim))
+    x = torch.exp(log_softmax(inputs, dim=dim, temperature=temperature))
     if torch.isinf(x).any() or torch.isnan(x).any():
         msg = "softmax is inf or nan"
         raise ValueError(msg)
@@ -158,15 +194,19 @@ def gumbel_softmax(
     Returns
     -------
     torch.Tensor
-        Gumbel softmaxed tensor.
+        Gumbel softmaxed tensor (hard one-hot with straight-through gradient).
 
     Raises
     ------
     ValueError
         If the gumbel_softmax is inf or nan.
     """
-    x = inputs - torch.max(inputs.detach(), dim=-1, keepdim=True)[0]
-    x = F.gumbel_softmax(x, dim=dim, tau=temperature, hard=True)
+    gumbels = -torch.empty_like(inputs).exponential_().log()  # Gumbel noise.
+    y_soft = torch.exp(log_softmax(inputs + gumbels, dim=dim, temperature=temperature))
+    index = torch.argmax(y_soft, dim=dim, keepdim=True)
+    y_hard = torch.zeros_like(y_soft).scatter_(dim, index, 1.0)
+    # Straight-through estimator
+    x = y_hard - y_soft.detach() + y_soft
     if torch.isinf(x).any() or torch.isnan(x).any():
         msg = "gumbel_softmax is inf or nan"
         raise ValueError(msg)

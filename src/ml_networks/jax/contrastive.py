@@ -9,6 +9,7 @@ from flax import nnx
 
 from ml_networks.config import ContrastiveLearningConfig
 from ml_networks.jax.layers import MLPLayer
+from ml_networks.jax.loss import cross_entropy
 
 
 class ContrastiveLearningLoss(nnx.Module):
@@ -219,8 +220,7 @@ class ContrastiveLearningLoss(nnx.Module):
             labels = jnp.arange(len(emb_1))
             sim_matrix = emb_1 @ emb_2.T
             # Cross entropy loss
-            log_softmax = jax.nn.log_softmax(sim_matrix, axis=-1)
-            nce_loss = -log_softmax[jnp.arange(len(labels)), labels] - np.log(len(sim_matrix))
+            nce_loss = cross_entropy(sim_matrix, labels, axis=-1) - np.log(len(sim_matrix))
             loss_dict["nce"] = nce_loss
         else:
             positive = jnp.sum(emb_1 * emb_2, axis=-1)

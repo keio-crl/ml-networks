@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from ml_networks.jax.distributions import StochState
+from ml_networks.jax.jax_utils import log_softmax
 
 
 class FocalFrequencyLoss:
@@ -261,6 +262,80 @@ def kl_balancing(posterior: StochState, prior: StochState, weight: float = 0.8) 
     return kld_prior + kld_posterior
 
 
+def cross_entropy(
+    logits: jax.Array,
+    target: jax.Array,
+    axis: int = -1,
+) -> jax.Array:
+    """
+    Cross entropy with integer class labels, robust to exponent underflow.
+
+    Computes ``-log_softmax(logits)[target]`` as ``softplus`` of the negative
+    logit margin between the target and the other classes.
+
+    Parameters
+    ----------
+    logits : jax.Array
+        The predicted logits (before softmax).
+    target : jax.Array
+        Integer class labels. Its shape is ``logits.shape`` without ``axis``.
+    axis : int
+        The class axis. Default is -1.
+
+    Returns
+    -------
+    jax.Array
+        Cross entropy per sample (no reduction). Its shape is that of ``target``.
+    """
+    z = jnp.moveaxis(logits, axis, -1)
+    z_t = jnp.take_along_axis(z, target[..., None], axis=-1)  # Target logit.
+    is_t = jax.nn.one_hot(target, z.shape[-1], dtype=bool)  # Target mask.
+    others = jnp.where(is_t, -jnp.inf, z - z_t)  # Exclude target from sum.
+    m = -jax.nn.logsumexp(others, axis=-1)  # Logit margin.
+    return jax.nn.softplus(-m)  # -log_softmax(z)_t.
+
+
+def soft_target_cross_entropy(
+    logits: jax.Array,
+    target_logits: jax.Array,
+    axis: int = -1,
+) -> jax.Array:
+    """
+    Cross entropy with soft targets given as logits, robust to exponent underflow.
+
+    The loss is ``-sum(p * log q)`` with ``q = softmax(logits)`` and
+    ``p = softmax(target_logits)``. The gradient w.r.t. ``logits`` (``q - p``) is
+    computed from ``log(q / p)`` so that it stays accurate when ``q`` and ``p``
+    are close or tiny.
+
+    Parameters
+    ----------
+    logits : jax.Array
+        The predicted (student) logits.
+    target_logits : jax.Array
+        The target (teacher) logits. Same shape as ``logits``.
+    axis : int
+        The class axis. Default is -1.
+
+    Returns
+    -------
+    jax.Array
+        Cross entropy per sample (no reduction). Its shape is ``logits.shape`` without ``axis``.
+    """
+    z_s = jnp.moveaxis(logits, axis, -1)
+    z_t = jnp.moveaxis(target_logits, axis, -1)
+    log_q = log_softmax(z_s)
+    q, p = jnp.exp(log_q), jnp.exp(log_softmax(z_t))
+    delta = z_s - z_t  # Logit difference.
+    d = delta - jnp.sum(p * delta, axis=-1, keepdims=True)  # Center under p.
+    s = d - jnp.log1p(jnp.sum(p * jnp.expm1(d), axis=-1, keepdims=True))  # log(q / p).
+    u = p * jnp.expm1(s)  # Difference q - p.
+    g = u - q * jnp.sum(u, axis=-1, keepdims=True)  # Ensure sum(g) = 0.
+    sg = jax.lax.stop_gradient
+    loss = -jnp.sum(p * sg(log_q), axis=-1)  # Forward loss.
+    return loss + jnp.sum(sg(g) * (z_s - sg(z_s)), axis=-1)  # Custom gradient g.
+
+
 def focal_loss(
     prediction: jax.Array,
     target: jax.Array,
@@ -297,18 +372,14 @@ def focal_loss(
     prediction = jnp.squeeze(prediction, axis=-1)
 
     if gamma:
-        log_prob = jax.nn.log_softmax(prediction, axis=1)
+        log_prob = log_softmax(prediction, axis=1)
         prob = jnp.exp(log_prob)
         # nll_loss equivalent: -log_prob[target]
         n_classes = prediction.shape[1]
         target_one_hot = jax.nn.one_hot(target, n_classes)
         loss = -jnp.sum(((1 - prob) ** gamma) * log_prob * target_one_hot, axis=1)
     else:
-        # Cross entropy
-        n_classes = prediction.shape[1]
-        target_one_hot = jax.nn.one_hot(target, n_classes)
-        log_prob = jax.nn.log_softmax(prediction, axis=1)
-        loss = -jnp.sum(log_prob * target_one_hot, axis=1)
+        loss = cross_entropy(prediction, target, axis=1)
     return loss.mean(axis=0).sum()
 
 

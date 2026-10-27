@@ -77,15 +77,18 @@ logits = torch.randn(32, 10)
 samples = gumbel_softmax(logits, temperature=1.0, hard=True)
 ```
 
-## Softmax
+## Softmax / Log-Softmax
 
-カスタムSoftmaxを使用できます。
+指数部のアンダーフローに強い Softmax / Log-Softmax を使用できます。
+最大のロジットを正規化項から除き, ロジットの差 (margin) の `softplus` で正規化するため,
+確率が非常に小さい・ほぼ 1 の場合でも精度を保ちます。
 
 ```python
-from ml_networks.torch import softmax
+from ml_networks.torch import log_softmax, softmax
 
 logits = torch.randn(32, 10)
 probs = softmax(logits, dim=-1)
+log_probs = log_softmax(logits, dim=-1)
 ```
 
 ## MinMaxNormalize

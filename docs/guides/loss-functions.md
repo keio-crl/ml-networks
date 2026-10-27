@@ -2,6 +2,23 @@
 
 損失関数の使用方法を説明します。
 
+## Cross Entropy
+
+指数部のアンダーフローに強い交差エントロピーです。reduction はせず, サンプルごとの値を返します。
+
+```python
+from ml_networks.torch import cross_entropy, soft_target_cross_entropy
+import torch
+
+logits = torch.randn(32, 10)
+labels = torch.randint(0, 10, (32,))
+loss = cross_entropy(logits, labels, dim=-1).mean()  # (32,) -> スカラー
+
+# 教師のロジットを soft target にする場合 (蒸留など)
+teacher_logits = torch.randn(32, 10)
+loss = soft_target_cross_entropy(logits, teacher_logits, dim=-1).mean()
+```
+
 ## Focal Loss
 
 分類の学習に適した損失関数です。
