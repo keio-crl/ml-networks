@@ -20,6 +20,7 @@ from ml_networks.config import (
     TransformerConfig,
 )
 from ml_networks.jax.activations import Activation
+from ml_networks.jax.jax_utils import softmax
 
 
 class Identity(nnx.Module):
@@ -1338,7 +1339,7 @@ class Attention2d(nnx.Module):
         q, k, v = jnp.split(qkv_r, 3, axis=-1)
         scale = 1 / np.sqrt(np.sqrt(ch))
         weight = jnp.einsum("btc,bsc->bts", q * scale, k * scale)
-        weight = jax.nn.softmax(weight - jnp.max(weight, axis=-1, keepdims=True), axis=-1)
+        weight = softmax(weight, axis=-1)
         a = jnp.einsum("bts,bsc->btc", weight, v)
         return a.reshape(bs, height, width, -1)
 
@@ -1423,7 +1424,7 @@ class Attention1d(nnx.Module):
         q, k, v = jnp.split(qkv_r, 3, axis=-1)
         scale = 1 / np.sqrt(np.sqrt(ch))
         weight = jnp.einsum("btc,bsc->bts", q * scale, k * scale)
-        weight = jax.nn.softmax(weight - jnp.max(weight, axis=-1, keepdims=True), axis=-1)
+        weight = softmax(weight, axis=-1)
         a = jnp.einsum("bts,bsc->btc", weight, v)
         return a.reshape(bs, length, -1)
 
@@ -1501,7 +1502,7 @@ class SpatialSoftmax(nnx.Module):
         x_flat = x.reshape(batch_size, height * width, channels)
         x_flat = jnp.transpose(x_flat, (0, 2, 1))
 
-        softmax_x = jax.nn.softmax(x_flat, axis=-1)
+        softmax_x = softmax(x_flat, axis=-1)
 
         pos_x_flat = pos_x.reshape(-1)
         pos_y_flat = pos_y.reshape(-1)
@@ -1519,9 +1520,7 @@ class SpatialSoftmax(nnx.Module):
         x_flat = x.reshape(batch_size, height * width, channels)
         x_flat = jnp.transpose(x_flat, (0, 2, 1))
 
-        exp_x = jnp.exp(x_flat - jnp.max(x_flat, axis=-1, keepdims=True))
-        exp_x_sum = 1.0 / (exp_x.sum(axis=-1, keepdims=True) + self.eps)
-        softmax_x = exp_x * exp_x_sum
+        softmax_x = softmax(x_flat, axis=-1)
 
         # straight-through trick
         softmax_x = softmax_x + x_flat - jax.lax.stop_gradient(x_flat)
@@ -1542,9 +1541,7 @@ class SpatialSoftmax(nnx.Module):
         x_flat = x.reshape(batch_size, height * width, channels)
         x_flat = jnp.transpose(x_flat, (0, 2, 1))
 
-        exp_x = jnp.exp(x_flat - jnp.max(x_flat, axis=-1, keepdims=True))
-        exp_x_sum = 1.0 / (exp_x.sum(axis=-1, keepdims=True) + self.eps)
-        softmax_x = exp_x * exp_x_sum
+        softmax_x = softmax(x_flat, axis=-1)
 
         argmax_x = jnp.argmax(x_flat, axis=-1)
         argmax_x = jax.nn.one_hot(argmax_x, num_classes=x_flat.shape[-1])

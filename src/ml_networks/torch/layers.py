@@ -13,7 +13,6 @@ from einops import rearrange
 from torch import nn
 from torchgeometry.contrib.spatial_soft_argmax2d import (  # type: ignore[import-untyped]
     create_meshgrid,
-    spatial_soft_argmax2d,
 )
 
 from ml_networks.config import (
@@ -25,6 +24,7 @@ from ml_networks.config import (
     TransformerConfig,
 )
 from ml_networks.torch.activations import Activation
+from ml_networks.torch.torch_utils import log_softmax
 
 
 def get_norm(
@@ -1247,7 +1247,7 @@ class Attention2d(nn.Module):
             q * scale,
             k * scale,
         )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
+        weight = torch.exp(log_softmax(weight, dim=-1))
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, height, width)
 
@@ -1321,7 +1321,7 @@ class Attention1d(nn.Module):
             q * scale,
             k * scale,
         )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight - torch.max(weight, dim=-1, keepdim=True)[0], dim=-1)
+        weight = torch.exp(log_softmax(weight, dim=-1))
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, length)
 
@@ -1366,7 +1366,50 @@ class SpatialSoftmax(nn.Module):
         elif cfg.is_straight_through:
             self.spatial_softmax = self.spatial_softmax_straight_through
         else:
-            self.spatial_softmax = spatial_soft_argmax2d
+            self.spatial_softmax = self.spatial_soft_argmax2d
+
+    def spatial_soft_argmax2d(self, x: torch.Tensor) -> torch.Tensor:
+        """Spatial Soft-Argmax layer.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            入力特徴量。形状は、(B, N, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            Spatial Softmaxを適用した特徴量。形状は、(B, N, 2)。
+
+        Raises
+        ------
+        TypeError
+            If input is not a torch.Tensor.
+        ValueError
+            If input shape is not 4D.
+        """
+        if not torch.is_tensor(x):
+            msg = f"Input input type is not a torch.Tensor. Got {type(x)}"
+            raise TypeError(msg)
+        if len(x.shape) != 4:
+            msg = f"Invalid input shape, we expect BxCxHxW. Got: {x.shape}"
+            raise ValueError(msg)
+        # unpack shapes and create view from input tensor
+        batch_size, channels, _height, _width = x.shape
+        pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
+        x = x.view(batch_size, channels, -1)
+
+        softmax_x = torch.exp(log_softmax(x, dim=-1))
+
+        # create coordinates grid
+        pos_x = pos_x.reshape(-1)
+        pos_y = pos_y.reshape(-1)
+
+        # compute the expected coordinates
+        expected_y = torch.sum(pos_y * softmax_x, dim=-1, keepdim=True)
+        expected_x = torch.sum(pos_x * softmax_x, dim=-1, keepdim=True)
+        output = torch.cat([expected_x, expected_y], dim=-1)
+        return output.view(batch_size, channels, 2)  # BxNx2
 
     def spatial_softmax_straight_through(self, x: torch.Tensor) -> torch.Tensor:
         """Spatial Softmax and Argmax layer.
@@ -1399,10 +1442,7 @@ class SpatialSoftmax(nn.Module):
         pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         x = x.view(batch_size, channels, -1)
 
-        # compute softmax with max subtraction  trick
-        exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
-        exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
-        softmax_x = exp_x * exp_x_sum
+        softmax_x = torch.exp(log_softmax(x, dim=-1))
 
         # straight-through trick
         softmax_x = softmax_x + x - x.detach()
@@ -1448,10 +1488,7 @@ class SpatialSoftmax(nn.Module):
         pos_y, pos_x = create_meshgrid(x, normalized_coordinates=True)
         x = x.view(batch_size, channels, -1)
 
-        # compute softmax with max subtraction  trick
-        exp_x = torch.exp(x - torch.max(x, dim=-1, keepdim=True)[0])
-        exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
-        softmax_x = exp_x * exp_x_sum
+        softmax_x = torch.exp(log_softmax(x, dim=-1))
 
         # straight-through trick
         argmax_x = torch.argmax(x, dim=-1, keepdim=True)

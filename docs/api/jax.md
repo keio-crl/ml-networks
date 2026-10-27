@@ -30,6 +30,8 @@ PyTorchバックエンドと同一のインターフェースを提供してい�
 
 ## 損失関数 (`ml_networks.jax.loss`)
 
+::: ml_networks.jax.loss.cross_entropy
+::: ml_networks.jax.loss.soft_target_cross_entropy
 ::: ml_networks.jax.loss.focal_loss
 ::: ml_networks.jax.loss.binary_focal_loss
 ::: ml_networks.jax.loss.charbonnier
@@ -52,6 +54,9 @@ PyTorchバックエンドと同一のインターフェースを提供してい�
 
 ::: ml_networks.jax.jax_utils.get_optimizer
 ::: ml_networks.jax.jax_utils.jax_fix_seed
+::: ml_networks.jax.jax_utils.log_softmax
+::: ml_networks.jax.jax_utils.softmax
+::: ml_networks.jax.jax_utils.gumbel_softmax
 ::: ml_networks.jax.jax_utils.MinMaxNormalize
 ::: ml_networks.jax.jax_utils.SoftmaxTransformation
 

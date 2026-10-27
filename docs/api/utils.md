@@ -56,6 +56,10 @@
 
 ::: ml_networks.torch.torch_utils.softmax
 
+### log_softmax
+
+::: ml_networks.torch.torch_utils.log_softmax
+
 ### MinMaxNormalize
 
 ::: ml_networks.torch.torch_utils.MinMaxNormalize

@@ -4,6 +4,14 @@
 
 `ml_networks.torch.loss`（PyTorch）と`ml_networks.jax.loss`（JAX）の両方で提供されています。
 
+## cross_entropy
+
+::: ml_networks.torch.loss.cross_entropy
+
+## soft_target_cross_entropy
+
+::: ml_networks.torch.loss.soft_target_cross_entropy
+
 ## focal_loss
 
 ::: ml_networks.torch.loss.focal_loss

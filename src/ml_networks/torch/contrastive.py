@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from ml_networks.config import ContrastiveLearningConfig
 from ml_networks.torch.layers import MLPLayer
+from ml_networks.torch.loss import cross_entropy
 
 
 class ContrastiveLearningLoss(pl.LightningModule):
@@ -274,7 +275,7 @@ class ContrastiveLearningLoss(pl.LightningModule):
         if self.is_ce_like:
             labels = torch.arange(len(emb_1), device=emb_1.device)
             sim_matrix = torch.mm(emb_1, emb_2.T)
-            nce_loss = F.cross_entropy(sim_matrix, labels, reduction="none") - np.log(len(sim_matrix))
+            nce_loss = cross_entropy(sim_matrix, labels, dim=-1) - np.log(len(sim_matrix))
             loss_dict["nce"] = nce_loss
         else:
             positive = torch.sum(emb_1 * emb_2, dim=-1)

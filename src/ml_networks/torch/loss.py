@@ -7,6 +7,7 @@ import torch.distributions as D
 import torch.nn.functional as F
 
 from ml_networks.torch.distributions import StochState
+from ml_networks.torch.torch_utils import log_softmax
 
 # version adaptation for PyTorch > 1.7.1
 IS_HIGH_VERSION = tuple(map(int, torch.__version__.split("+")[0].split("."))) > (1, 7, 1)
@@ -275,6 +276,80 @@ def kl_balancing(posterior: StochState, prior: StochState, weight: float = 0.8) 
     return kld_prior + kld_posterior
 
 
+def cross_entropy(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    dim: int = -1,
+) -> torch.Tensor:
+    """
+    Cross entropy with integer class labels, robust to exponent underflow.
+
+    Computes ``-log_softmax(logits)[target]`` as ``softplus`` of the negative
+    logit margin between the target and the other classes.
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        The predicted logits (before softmax).
+    target : torch.Tensor
+        Integer class labels. Its shape is ``logits.shape`` without ``dim``.
+    dim : int
+        The class dimension. Default is -1.
+
+    Returns
+    -------
+    torch.Tensor
+        Cross entropy per sample (no reduction). Its shape is that of ``target``.
+    """
+    z = logits.movedim(dim, -1)
+    t = target.unsqueeze(-1)
+    z_t = torch.gather(z, -1, t)  # Target logit.
+    is_t = torch.zeros_like(z, dtype=torch.bool).scatter_(-1, t, True)  # Target mask.
+    others = (z - z_t).masked_fill(is_t, -torch.inf)  # Exclude target from sum.
+    m = -torch.logsumexp(others, dim=-1)  # Logit margin.
+    return F.softplus(-m)  # -log_softmax(z)_t.
+
+
+def soft_target_cross_entropy(
+    logits: torch.Tensor,
+    target_logits: torch.Tensor,
+    dim: int = -1,
+) -> torch.Tensor:
+    """
+    Cross entropy with soft targets given as logits, robust to exponent underflow.
+
+    The loss is ``-sum(p * log q)`` with ``q = softmax(logits)`` and
+    ``p = softmax(target_logits)``. The gradient w.r.t. ``logits`` (``q - p``) is
+    computed from ``log(q / p)`` so that it stays accurate when ``q`` and ``p``
+    are close or tiny.
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        The predicted (student) logits.
+    target_logits : torch.Tensor
+        The target (teacher) logits. Same shape as ``logits``.
+    dim : int
+        The class dimension. Default is -1.
+
+    Returns
+    -------
+    torch.Tensor
+        Cross entropy per sample (no reduction). Its shape is ``logits.shape`` without ``dim``.
+    """
+    z_s = logits.movedim(dim, -1)
+    z_t = target_logits.movedim(dim, -1)
+    log_q = log_softmax(z_s)
+    q, p = torch.exp(log_q), torch.exp(log_softmax(z_t))
+    delta = z_s - z_t  # Logit difference.
+    d = delta - torch.sum(p * delta, dim=-1, keepdim=True)  # Center under p.
+    s = d - torch.log1p(torch.sum(p * torch.expm1(d), dim=-1, keepdim=True))  # log(q / p).
+    u = p * torch.expm1(s)  # Difference q - p.
+    g = u - q * torch.sum(u, dim=-1, keepdim=True)  # Ensure sum(g) = 0.
+    loss = -torch.sum(p * log_q.detach(), dim=-1)  # Forward loss.
+    return loss + torch.sum(g.detach() * (z_s - z_s.detach()), dim=-1)  # Custom gradient g.
+
+
 def focal_loss(
     prediction: torch.Tensor,
     target: torch.Tensor,
@@ -308,11 +383,11 @@ def focal_loss(
     """
     prediction = prediction.unsqueeze(1).transpose(sum_dim, 1).squeeze(-1)
     if gamma:
-        log_prob = F.log_softmax(prediction, dim=1)
+        log_prob = log_softmax(prediction, dim=1)
         prob = torch.exp(log_prob)
         loss = F.nll_loss((1 - prob) ** gamma * log_prob, target, reduction="none")
     else:
-        loss = F.cross_entropy(prediction, target, reduction="none")
+        loss = cross_entropy(prediction, target, dim=1)
     return loss.mean(0).sum()
 
 

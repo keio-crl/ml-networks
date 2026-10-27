@@ -107,9 +107,46 @@ def get_optimizer(
     return optimizer_fn(**mapped_kwargs)
 
 
+def log_softmax(
+    inputs: jax.Array,
+    axis: int = -1,
+    temperature: float = 1.0,
+) -> jax.Array:
+    """
+    Log-softmax function with temperature, robust to exponent underflow.
+
+    The argmax entry is excluded from the normalizer so that the log-probability
+    is computed via ``softplus`` of the logit margin. This keeps the argmax entry
+    exactly 0 before the correction and avoids ``log(1 + tiny)`` losing precision.
+
+    Parameters
+    ----------
+    inputs : jax.Array
+        Input logits.
+    axis : int
+        Axis to apply log-softmax. Default is -1.
+    temperature : float
+        Temperature. Default is 1.0.
+
+    Returns
+    -------
+    jax.Array
+        Log-softmaxed tensor.
+
+    """
+    z = jnp.moveaxis(inputs / temperature, axis, -1)
+    i_max = jnp.argmax(z, axis=-1)
+    z_max = jnp.take_along_axis(z, i_max[..., None], axis=-1)  # Max logit.
+    is_max = jax.nn.one_hot(i_max, z.shape[-1], dtype=bool)  # Max mask.
+    shifted = jnp.where(is_max, 0.0, z - z_max)  # Exact 0 at argmax.
+    others = jnp.where(is_max, -jnp.inf, shifted)  # Exclude argmax from sum.
+    m = -jax.nn.logsumexp(others, axis=-1, keepdims=True)  # Logit margin.
+    return jnp.moveaxis(shifted - jax.nn.softplus(-m), -1, axis)
+
+
 def softmax(
     inputs: jax.Array,
-    axis: int,
+    axis: int = -1,
     temperature: float = 1.0,
 ) -> jax.Array:
     """
@@ -120,7 +157,7 @@ def softmax(
     inputs : jax.Array
         Input tensor.
     axis : int
-        Axis to apply softmax.
+        Axis to apply softmax. Default is -1.
     temperature : float
         Temperature. Default is 1.0.
 
@@ -130,8 +167,7 @@ def softmax(
         Softmaxed tensor.
 
     """
-    x = inputs / temperature
-    return jnp.exp(jax.nn.log_softmax(x, axis=axis))
+    return jnp.exp(log_softmax(inputs, axis=axis, temperature=temperature))
 
 
 def gumbel_softmax(
@@ -169,7 +205,7 @@ def gumbel_softmax(
     u = jax.random.uniform(key, shape=x.shape, minval=1e-10, maxval=1.0)
     gumbel_noise = -jnp.log(-jnp.log(u))
     y = (x + gumbel_noise) / temperature
-    y_soft = jax.nn.softmax(y, axis=axis)
+    y_soft = softmax(y, axis=axis)
 
     # Hard one-hot with straight-through
     index = jnp.argmax(y_soft, axis=axis)

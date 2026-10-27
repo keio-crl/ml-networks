@@ -23,6 +23,7 @@ from .jax_utils import (
     get_optimizer,
     gumbel_softmax,
     jax_fix_seed,
+    log_softmax,
     softmax,
 )
 from .layers import (
@@ -41,7 +42,16 @@ from .layers import (
     TransformerLayer,
     get_norm,
 )
-from .loss import FocalFrequencyLoss, binary_focal_loss, charbonnier, focal_loss, kl_balancing, kl_divergence
+from .loss import (
+    FocalFrequencyLoss,
+    binary_focal_loss,
+    charbonnier,
+    cross_entropy,
+    focal_loss,
+    kl_balancing,
+    kl_divergence,
+    soft_target_cross_entropy,
+)
 from .unet import ConditionalUnet1d, ConditionalUnet2d
 from .vision import ConvNet, ConvTranspose, Decoder, Encoder, ResNetPixShuffle, ResNetPixUnshuffle, ViT
 
@@ -93,6 +103,7 @@ __all__ = [
     "cat_dist",
     "charbonnier",
     "count_nnx_params",
+    "cross_entropy",
     "focal_loss",
     "get_dist",
     "get_norm",
@@ -101,6 +112,8 @@ __all__ = [
     "jax_fix_seed",
     "kl_balancing",
     "kl_divergence",
+    "log_softmax",
+    "soft_target_cross_entropy",
     "softmax",
     "stack_dist",
 ]
