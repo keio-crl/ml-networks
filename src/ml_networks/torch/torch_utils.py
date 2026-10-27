@@ -174,6 +174,45 @@ def softmax(
     return x
 
 
+def softmax_log_ratio(
+    logits: torch.Tensor,
+    target_logits: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Log-ratio between two softmax distributions, robust to exponent underflow.
+
+    With ``q = softmax(logits)`` and ``p = softmax(target_logits)`` along the last
+    dimension, ``log(q / p)`` and ``q - p`` are computed from the logit difference
+    so that they stay accurate when ``q`` and ``p`` are close or tiny.
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        Logits of ``q``.
+    target_logits : torch.Tensor
+        Logits of ``p``. Same shape as ``logits``.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ``(log_q, p, s, g)``. ``log_q`` and ``p`` keep the computation graph,
+        ``s = log(q / p)`` and ``g = q - p`` (with ``sum(g) = 0``) are detached.
+    """
+    log_q, log_p = log_softmax(logits), log_softmax(target_logits)
+    q, p = torch.exp(log_q), torch.exp(log_p)
+    with torch.no_grad():
+        delta = logits - target_logits  # Logit difference.
+        d = delta - torch.sum(p * delta, dim=-1, keepdim=True)  # Center under p.
+        # c = log E_p[exp(d)] (= KL(p || q) + ...): log1p form for precision, logsumexp form when large.
+        c_large = torch.logsumexp(log_p + d, dim=-1, keepdim=True)
+        pe = torch.where(d < 1, p * torch.expm1(d.clamp(max=1)), torch.exp(log_p + d) - p)  # p * expm1(d).
+        c = torch.where(c_large > 1, c_large, torch.log1p(torch.sum(pe, dim=-1, keepdim=True)))
+        s = d - c  # log(q / p).
+        u = torch.where(s > 0, -q * torch.expm1(-s.clamp(min=0)), p * torch.expm1(s.clamp(max=0)))  # q - p.
+        g = u - q * torch.sum(u, dim=-1, keepdim=True)  # Ensure sum(g) = 0.
+    return log_q, p, s, g
+
+
 def gumbel_softmax(
     inputs: torch.Tensor,
     dim: int,

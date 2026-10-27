@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import torch
 import torch.distributions as D  # pylint: disable=import-self
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions import constraints
 
-from ml_networks.torch.torch_utils import softmax
+from ml_networks.torch.torch_utils import log_softmax, softmax, softmax_log_ratio
 from ml_networks.utils import save_blosc2
 
 
@@ -32,10 +33,10 @@ def get_dist(state: StochState) -> D.Independent:
         normal = D.Normal(state.mean, state.std)
         return D.Independent(normal, 1)
     if isinstance(state, CategoricalStoch):
-        categorical = D.OneHotCategoricalStraightThrough(probs=state.probs)
+        categorical = OneHotCategoricalStraightThrough(logits=state.logits)
         return D.Independent(categorical, 1)
     if isinstance(state, BernoulliStoch):
-        bernoulli = BernoulliStraightThrough(probs=state.probs)
+        bernoulli = BernoulliStraightThrough(logits=state.logits)
         return D.Independent(bernoulli, 2)
     raise NotImplementedError
 
@@ -402,7 +403,7 @@ class CategoricalStoch:
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
     def get_distribution(self, independent: int = 1) -> D.Independent:
-        return D.Independent(D.OneHotCategoricalStraightThrough(self.probs), independent)
+        return D.Independent(OneHotCategoricalStraightThrough(logits=self.logits), independent)
 
 
 @dataclass
@@ -574,7 +575,7 @@ class BernoulliStoch:
         save_blosc2(f"{path}/stoch.blosc2", self.stoch.detach().clone().cpu().numpy())
 
     def get_distribution(self, independent: int = 1) -> D.Independent:
-        return D.Independent(BernoulliStraightThrough(self.probs), independent)
+        return D.Independent(BernoulliStraightThrough(logits=self.logits), independent)
 
 
 StochState = NormalStoch | CategoricalStoch | BernoulliStoch
@@ -708,6 +709,112 @@ class BernoulliStraightThrough(D.Bernoulli):
         return samples + (probs - probs.detach())
 
 
+class OneHotCategoricalStraightThrough(D.Distribution):
+    """
+    One-hot categorical distribution parameterized by logits, robust to exponent underflow.
+
+    ``log_prob``, ``entropy`` and the KL divergence are computed from ``log_softmax``
+    of the logits instead of ``log(probs)``, so tiny probabilities do not become ``-inf``.
+    ``rsample`` returns a one-hot sample with Straight-Through Estimator.
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        Unnormalized logits. The last dimension is the category.
+    validate_args : bool or None, optional
+        Whether to validate the arguments. Default is None.
+
+    Examples
+    --------
+    >>> logits = torch.randn(2, 3)
+    >>> dist = OneHotCategoricalStraightThrough(logits=logits)
+    >>> dist.rsample().shape
+    torch.Size([2, 3])
+    >>> dist.log_prob(dist.sample()).shape
+    torch.Size([2])
+
+    """
+
+    arg_constraints: ClassVar[dict[str, constraints.Constraint]] = {"logits": constraints.real_vector}
+    support = constraints.one_hot
+    has_rsample = True
+
+    def __init__(self, logits: torch.Tensor, validate_args: bool | None = None) -> None:
+        self.unnormalized_logits = logits
+        self.logits = log_softmax(logits, dim=-1)  # Normalized log-probabilities.
+        self.probs = torch.exp(self.logits)
+        super().__init__(
+            batch_shape=logits.shape[:-1],
+            event_shape=logits.shape[-1:],
+            validate_args=validate_args,
+        )
+
+    def expand(
+        self,
+        batch_shape: torch.Size | list[int] | tuple[int, ...],
+        _instance: OneHotCategoricalStraightThrough | None = None,
+    ) -> OneHotCategoricalStraightThrough:
+        logits = self.unnormalized_logits.expand(torch.Size(batch_shape) + self.event_shape)
+        return OneHotCategoricalStraightThrough(logits=logits, validate_args=False)
+
+    @property
+    def mean(self) -> torch.Tensor:
+        return self.probs
+
+    @property
+    def mode(self) -> torch.Tensor:
+        return F.one_hot(self.probs.argmax(dim=-1), num_classes=self.event_shape[-1]).to(self.probs)
+
+    @property
+    def variance(self) -> torch.Tensor:
+        return self.probs * (1 - self.probs)
+
+    def sample(self, sample_shape: torch.Size | list[int] | tuple[int, ...] = torch.Size()) -> torch.Tensor:
+        shape = self._extended_shape(torch.Size(sample_shape))
+        with torch.no_grad():
+            gumbels = -torch.empty(shape, dtype=self.logits.dtype, device=self.logits.device).exponential_().log()
+            index = torch.argmax(self.logits.expand(shape) + gumbels, dim=-1)  # Gumbel-max trick.
+            return F.one_hot(index, num_classes=self.event_shape[-1]).to(self.logits)
+
+    def rsample(self, sample_shape: torch.Size | list[int] | tuple[int, ...] = torch.Size()) -> torch.Tensor:
+        samples = self.sample(sample_shape)
+        return samples + (self.probs - self.probs.detach())
+
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        if self._validate_args:
+            self._validate_sample(value)
+        value, logits = torch.broadcast_tensors(value, self.logits)
+        index = value.argmax(dim=-1, keepdim=True)
+        return torch.gather(logits, -1, index).squeeze(-1)
+
+    def entropy(self) -> torch.Tensor:
+        return -torch.sum(self.probs * self.logits, dim=-1)
+
+
+@D.register_kl(OneHotCategoricalStraightThrough, OneHotCategoricalStraightThrough)
+def _kl_onehot_categorical(
+    p: OneHotCategoricalStraightThrough,
+    q: OneHotCategoricalStraightThrough,
+) -> torch.Tensor:
+    """KL(p || q) computed from the logit difference, robust to exponent underflow."""
+    z_q = q.unnormalized_logits
+    _, probs_p, log_ratio, grad_q = softmax_log_ratio(z_q, p.unnormalized_logits)  # log(q / p), q - p.
+    kl = torch.sum(probs_p * (-log_ratio), dim=-1)  # Gradient w.r.t. p flows through probs_p.
+    return kl + torch.sum(grad_q * (z_q - z_q.detach()), dim=-1)  # Gradient q - p w.r.t. q.
+
+
+@D.register_kl(OneHotCategoricalStraightThrough, D.OneHotCategorical)
+def _kl_onehot_categorical_torch(p: OneHotCategoricalStraightThrough, q: D.OneHotCategorical) -> torch.Tensor:
+    """KL(p || q) with q of `torch.distributions.OneHotCategorical`."""
+    return _kl_onehot_categorical(p, OneHotCategoricalStraightThrough(logits=q.logits))
+
+
+@D.register_kl(D.OneHotCategorical, OneHotCategoricalStraightThrough)
+def _kl_torch_onehot_categorical(p: D.OneHotCategorical, q: OneHotCategoricalStraightThrough) -> torch.Tensor:
+    """KL(p || q) with p of `torch.distributions.OneHotCategorical`."""
+    return _kl_onehot_categorical(OneHotCategoricalStraightThrough(logits=p.logits), q)
+
+
 class Distribution(nn.Module):
     """
     A distribution function.
@@ -802,9 +909,9 @@ class Distribution(nn.Module):
         batch_shape = logits.shape[:-1]
         logits_chunk = torch.chunk(logits, self.n_groups, dim=-1)
         logits = torch.stack(logits_chunk, dim=-2)
-        logits = logits
-        probs = softmax(logits, dim=-1, temperature=1 / inv_tmp)
-        dist = D.OneHotCategoricalStraightThrough(probs=probs)
+        logits = logits * inv_tmp
+        probs = softmax(logits, dim=-1)
+        dist = OneHotCategoricalStraightThrough(logits=logits)
         posterior_dist = D.Independent(dist, 1)
 
         sample = posterior_dist.rsample()
@@ -827,7 +934,7 @@ class Distribution(nn.Module):
         logits = logits * inv_tmp
         probs = torch.sigmoid(logits)
 
-        dist = BernoulliStraightThrough(probs=probs)
+        dist = BernoulliStraightThrough(logits=logits)
         posterior_dist = D.Independent(dist, 1)
 
         sample = posterior_dist.rsample()

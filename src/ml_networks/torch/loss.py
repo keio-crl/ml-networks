@@ -7,7 +7,7 @@ import torch.distributions as D
 import torch.nn.functional as F
 
 from ml_networks.torch.distributions import StochState
-from ml_networks.torch.torch_utils import log_softmax
+from ml_networks.torch.torch_utils import log_softmax, softmax_log_ratio
 
 # version adaptation for PyTorch > 1.7.1
 IS_HIGH_VERSION = tuple(map(int, torch.__version__.split("+")[0].split("."))) > (1, 7, 1)
@@ -339,15 +339,9 @@ def soft_target_cross_entropy(
     """
     z_s = logits.movedim(dim, -1)
     z_t = target_logits.movedim(dim, -1)
-    log_q = log_softmax(z_s)
-    q, p = torch.exp(log_q), torch.exp(log_softmax(z_t))
-    delta = z_s - z_t  # Logit difference.
-    d = delta - torch.sum(p * delta, dim=-1, keepdim=True)  # Center under p.
-    s = d - torch.log1p(torch.sum(p * torch.expm1(d), dim=-1, keepdim=True))  # log(q / p).
-    u = p * torch.expm1(s)  # Difference q - p.
-    g = u - q * torch.sum(u, dim=-1, keepdim=True)  # Ensure sum(g) = 0.
+    log_q, p, _, g = softmax_log_ratio(z_s, z_t)  # g = q - p.
     loss = -torch.sum(p * log_q.detach(), dim=-1)  # Forward loss.
-    return loss + torch.sum(g.detach() * (z_s - z_s.detach()), dim=-1)  # Custom gradient g.
+    return loss + torch.sum(g * (z_s - z_s.detach()), dim=-1)  # Custom gradient g.
 
 
 def focal_loss(
