@@ -94,7 +94,7 @@ kld = D.kl_divergence(torch_dist_z, normal).mean()
 #### 方法2: Pythonコードで直接設定する
 
 ```python
-from ml_networks.torch import Distribution, Encoder
+from ml_networks.torch import Distribution, Encoder, OneHotCategoricalStraightThrough
 from ml_networks import ConvNetConfig, ConvConfig, MLPConfig, LinearConfig
 import torch
 import torch.distributions as D
@@ -162,7 +162,8 @@ dist_z = dist(z)
 print(dist_z)
 # CategoricalStoch(logits: torch.Size([32, 8, 8]), probs: torch.Size([32, 8, 8]), stoch: torch.Size([32, 8, 8]))
 
-flat_dist = D.OneHotCategorical(probs=torch.ones_like(dist_z.probs)/dist_z.probs.shape[-1])
+# 分布はロジットから作られ, log_prob・エントロピー・KL は log_softmax から計算される (確率が 0 に潰れても -inf にならない)
+flat_dist = D.Independent(OneHotCategoricalStraightThrough(logits=torch.zeros_like(dist_z.logits)), 1)
 kld = D.kl_divergence(dist_z.get_distribution(), flat_dist).mean()
 ```
 

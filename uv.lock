@@ -1809,6 +1809,7 @@ docs = [
     { name = "mkdocs-git-revision-date-localized-plugin" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pymdown-extensions" },
 ]
 jax = [
     { name = "distrax", version = "0.1.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1846,6 +1847,7 @@ requires-dist = [
     { name = "optax", marker = "extra == 'jax'", specifier = ">=0.2.0" },
     { name = "pip", marker = "extra == 'dev'", specifier = ">=25.3" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = "<12.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "<=6.0.0" },
     { name = "pytorch-lightning", specifier = ">=2.4.0" },

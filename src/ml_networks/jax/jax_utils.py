@@ -170,6 +170,46 @@ def softmax(
     return jnp.exp(log_softmax(inputs, axis=axis, temperature=temperature))
 
 
+def softmax_log_ratio(
+    logits: jax.Array,
+    target_logits: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """
+    Log-ratio between two softmax distributions, robust to exponent underflow.
+
+    With ``q = softmax(logits)`` and ``p = softmax(target_logits)`` along the last
+    axis, ``log(q / p)`` and ``q - p`` are computed from the logit difference so
+    that they stay accurate when ``q`` and ``p`` are close or tiny.
+
+    Parameters
+    ----------
+    logits : jax.Array
+        Logits of ``q``.
+    target_logits : jax.Array
+        Logits of ``p``. Same shape as ``logits``.
+
+    Returns
+    -------
+    tuple[jax.Array, jax.Array, jax.Array, jax.Array]
+        ``(log_q, p, s, g)``. ``log_q`` and ``p`` are differentiable,
+        ``s = log(q / p)`` and ``g = q - p`` (with ``sum(g) = 0``) are under ``stop_gradient``.
+    """
+    log_q, log_p = log_softmax(logits), log_softmax(target_logits)
+    q, p = jnp.exp(log_q), jnp.exp(log_p)
+    sg = jax.lax.stop_gradient
+    q_, p_, log_p_ = sg(q), sg(p), sg(log_p)
+    delta = sg(logits - target_logits)  # Logit difference.
+    d = delta - jnp.sum(p_ * delta, axis=-1, keepdims=True)  # Center under p.
+    # c = log E_p[exp(d)] (= KL(p || q) + ...): log1p form for precision, logsumexp form when large.
+    c_large = jax.nn.logsumexp(log_p_ + d, axis=-1, keepdims=True)
+    pe = jnp.where(d < 1, p_ * jnp.expm1(jnp.minimum(d, 1)), jnp.exp(log_p_ + d) - p_)  # p * expm1(d).
+    c = jnp.where(c_large > 1, c_large, jnp.log1p(jnp.sum(pe, axis=-1, keepdims=True)))
+    s = d - c  # log(q / p).
+    u = jnp.where(s > 0, -q_ * jnp.expm1(-jnp.maximum(s, 0)), p_ * jnp.expm1(jnp.minimum(s, 0)))  # q - p.
+    g = u - q_ * jnp.sum(u, axis=-1, keepdims=True)  # Ensure sum(g) = 0.
+    return log_q, p, s, g
+
+
 def gumbel_softmax(
     inputs: jax.Array,
     key: jax.Array,

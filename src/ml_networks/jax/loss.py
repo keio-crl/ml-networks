@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from ml_networks.jax.distributions import StochState
-from ml_networks.jax.jax_utils import log_softmax
+from ml_networks.jax.jax_utils import log_softmax, softmax_log_ratio
 
 
 class FocalFrequencyLoss:
@@ -324,16 +324,10 @@ def soft_target_cross_entropy(
     """
     z_s = jnp.moveaxis(logits, axis, -1)
     z_t = jnp.moveaxis(target_logits, axis, -1)
-    log_q = log_softmax(z_s)
-    q, p = jnp.exp(log_q), jnp.exp(log_softmax(z_t))
-    delta = z_s - z_t  # Logit difference.
-    d = delta - jnp.sum(p * delta, axis=-1, keepdims=True)  # Center under p.
-    s = d - jnp.log1p(jnp.sum(p * jnp.expm1(d), axis=-1, keepdims=True))  # log(q / p).
-    u = p * jnp.expm1(s)  # Difference q - p.
-    g = u - q * jnp.sum(u, axis=-1, keepdims=True)  # Ensure sum(g) = 0.
+    log_q, p, _, g = softmax_log_ratio(z_s, z_t)  # g = q - p.
     sg = jax.lax.stop_gradient
     loss = -jnp.sum(p * sg(log_q), axis=-1)  # Forward loss.
-    return loss + jnp.sum(sg(g) * (z_s - sg(z_s)), axis=-1)  # Custom gradient g.
+    return loss + jnp.sum(g * (z_s - sg(z_s)), axis=-1)  # Custom gradient g.
 
 
 def focal_loss(

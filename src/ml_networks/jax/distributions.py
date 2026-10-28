@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import numpy as np
 from flax import nnx
 
-from ml_networks.jax.jax_utils import softmax
+from ml_networks.jax.jax_utils import log_softmax, softmax, softmax_log_ratio
 from ml_networks.utils import save_blosc2
 
 
@@ -32,12 +32,9 @@ def get_dist(state: StochState) -> distrax.Distribution:
     if isinstance(state, NormalStoch):
         return distrax.Independent(distrax.Normal(state.mean, state.std), 1)
     if isinstance(state, CategoricalStoch):
-        return distrax.Independent(
-            distrax.OneHotCategorical(probs=state.probs),
-            1,
-        )
+        return distrax.Independent(OneHotCategorical(logits=state.logits), 1)
     if isinstance(state, BernoulliStoch):
-        return distrax.Independent(distrax.Bernoulli(probs=state.probs), 2)
+        return distrax.Independent(distrax.Bernoulli(logits=state.logits), 2)
     raise NotImplementedError
 
 
@@ -273,10 +270,7 @@ class CategoricalStoch:
         save_blosc2(f"{path}/stoch.blosc2", np.asarray(self.stoch))
 
     def get_distribution(self, independent: int = 1) -> distrax.Distribution:
-        return distrax.Independent(
-            distrax.OneHotCategorical(probs=self.probs),
-            independent,
-        )
+        return distrax.Independent(OneHotCategorical(logits=self.logits), independent)
 
 
 @dataclass
@@ -392,7 +386,7 @@ class BernoulliStoch:
         save_blosc2(f"{path}/stoch.blosc2", np.asarray(self.stoch))
 
     def get_distribution(self, independent: int = 1) -> distrax.Distribution:
-        return distrax.Independent(distrax.Bernoulli(probs=self.probs), independent)
+        return distrax.Independent(distrax.Bernoulli(logits=self.logits), independent)
 
 
 StochState = NormalStoch | CategoricalStoch | BernoulliStoch
@@ -494,6 +488,77 @@ def stack_dist(stochs: tuple[StochState, ...], axis: int = 0) -> StochState | No
             jnp.stack([s.stoch for s in bs], axis=axis),
         )
     return None
+
+
+class OneHotCategorical(distrax.OneHotCategorical):
+    """
+    One-hot categorical distribution parameterized by logits, robust to exponent underflow.
+
+    ``log_prob``, ``entropy`` and the KL divergence are computed from ``log_softmax``
+    of the logits instead of ``log(probs)``, so tiny probabilities do not become ``-inf``.
+
+    Parameters
+    ----------
+    logits : jax.Array
+        Unnormalized logits. The last axis is the category.
+    dtype : jnp.dtype or type, optional
+        The type of event samples. Default is int.
+
+    Examples
+    --------
+    >>> dist = OneHotCategorical(logits=jnp.zeros((2, 3)))
+    >>> dist.log_prob(jnp.eye(3)[:2]).shape
+    (2,)
+
+    """
+
+    def __init__(self, logits: jax.Array, dtype: jnp.dtype | type = int) -> None:
+        super().__init__(logits=logits, dtype=dtype)
+        self._unnormalized_logits = logits
+        self._logits = log_softmax(logits, axis=-1)  # Normalized log-probabilities.
+
+    @property
+    def unnormalized_logits(self) -> jax.Array:
+        """The logits given at construction."""
+        return self._unnormalized_logits
+
+    @property
+    def probs(self) -> jax.Array:
+        """The probabilities for each event."""
+        return jnp.exp(self.logits)
+
+    def entropy(self) -> jax.Array:
+        """Calculate the Shannon entropy (in nats)."""
+        return -jnp.sum(self.probs * self.logits, axis=-1)
+
+    def kl_divergence(self, other_dist: distrax.DistributionLike, *args: object, **kwargs: object) -> jax.Array:
+        """Calculate ``KL(self || other_dist)`` from the logit difference.
+
+        Parameters
+        ----------
+        other_dist : distrax.DistributionLike
+            The other distribution.
+        *args : object
+            Passed to ``distrax.OneHotCategorical.kl_divergence`` when ``other_dist`` is not this class.
+        **kwargs : object
+            Passed to ``distrax.OneHotCategorical.kl_divergence`` when ``other_dist`` is not this class.
+
+        Returns
+        -------
+        jax.Array
+            Batchwise ``KL(self || other_dist)``.
+        """
+        if not isinstance(other_dist, OneHotCategorical):
+            return super().kl_divergence(other_dist, *args, **kwargs)
+        z_q = other_dist.unnormalized_logits
+        _, probs_p, log_ratio, grad_q = softmax_log_ratio(z_q, self.unnormalized_logits)  # log(q / p), q - p.
+        kl = jnp.sum(probs_p * (-log_ratio), axis=-1)  # Gradient w.r.t. self flows through probs_p.
+        return kl + jnp.sum(grad_q * (z_q - jax.lax.stop_gradient(z_q)), axis=-1)  # Gradient q - p w.r.t. other.
+
+    def __getitem__(self, index: object) -> OneHotCategorical:
+        """See `Distribution.__getitem__`."""
+        index = distrax._src.distributions.distribution.to_batch_shape_index(self.batch_shape, index)  # noqa: SLF001
+        return OneHotCategorical(logits=self.unnormalized_logits[index], dtype=self._dtype)
 
 
 class BSQCodebook(nnx.Module):
@@ -622,14 +687,14 @@ class Distribution(nnx.Module):
     ) -> CategoricalStoch:
         batch_shape = logits.shape[:-1]
         logits_chunks = jnp.split(logits, self.n_groups, axis=-1)
-        logits_stacked = jnp.stack(logits_chunks, axis=-2)
-        probs = softmax(logits_stacked, axis=-1, temperature=1 / inv_tmp)
+        logits_stacked = jnp.stack(logits_chunks, axis=-2) * inv_tmp
+        probs = softmax(logits_stacked, axis=-1)
 
         if key is None:
             key = self.rngs()
         # Sample using Gumbel-max trick for one-hot with straight-through
         gumbel_noise = -jnp.log(-jnp.log(jax.random.uniform(key, probs.shape, minval=1e-10, maxval=1.0)))
-        y = jnp.log(probs + 1e-10) + gumbel_noise
+        y = logits_stacked + gumbel_noise
         hard = jax.nn.one_hot(jnp.argmax(y, axis=-1), self.n_class)
         sample = hard + probs - jax.lax.stop_gradient(probs)
 
